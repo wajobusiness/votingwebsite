@@ -157,34 +157,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Fetch Dashboard Metrics & Datasets
 // =========================================================================
 
-// 1. Total Metrics
-$totalUsers = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_admin = 0")->fetchColumn();
-$totalVotes = (int)$pdo->query("SELECT COALESCE(SUM(vote_count), 0) FROM users WHERE is_admin = 0")->fetchColumn();
-$totalRevenue = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'success'")->fetchColumn();
-$totalTransactions = (int)$pdo->query("SELECT COUNT(*) FROM payments WHERE status = 'success'")->fetchColumn();
+// 1. Total Metrics (Fail-Safe)
+$totalUsers = 0;
+$totalVotes = 0;
+$totalRevenue = 0.0;
+$totalTransactions = 0;
 
-// 2. Contestant Leaderboard
-$contestantsStmt = $pdo->query("
-    SELECT id, username, full_name, email, phone_number, photo, vote_count,
-           RANK() OVER (ORDER BY vote_count DESC) AS ranking
-    FROM users 
-    WHERE is_admin = 0 
-    ORDER BY vote_count DESC
-");
-$contestants = $contestantsStmt->fetchAll();
+try {
+    $totalUsers = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_admin = 0")->fetchColumn();
+    $totalVotes = (int)$pdo->query("SELECT COALESCE(SUM(vote_count), 0) FROM users WHERE is_admin = 0")->fetchColumn();
+} catch (Exception $e) {
+    error_log("Users query error: " . $e->getMessage());
+}
 
-// 3. Recent Verified Payments
-$paymentsStmt = $pdo->query("
-    SELECT p.*, u.full_name AS contestant_name, u.username AS contestant_username
-    FROM payments p
-    LEFT JOIN users u ON p.user_id = u.id
-    ORDER BY p.created_at DESC 
-    LIMIT 25
-");
-$recentPayments = $paymentsStmt->fetchAll();
+try {
+    $totalRevenue = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'success'")->fetchColumn();
+    $totalTransactions = (int)$pdo->query("SELECT COUNT(*) FROM payments WHERE status = 'success'")->fetchColumn();
+} catch (Exception $e) {
+    // If payments table does not exist yet
+    $totalRevenue = 0.0;
+    $totalTransactions = 0;
+}
 
-// 4. Competitions
-$competitions = $pdo->query("SELECT * FROM competitions ORDER BY created_at DESC")->fetchAll();
+// 2. Contestant Leaderboard (Cross-version compatible without RANK OVER)
+$contestants = [];
+try {
+    $contestantsStmt = $pdo->query("
+        SELECT id, username, full_name, email, phone_number, photo, vote_count
+        FROM users 
+        WHERE is_admin = 0 
+        ORDER BY vote_count DESC
+    ");
+    $rawContestants = $contestantsStmt->fetchAll();
+    $rankNum = 1;
+    foreach ($rawContestants as $row) {
+        $row['ranking'] = $rankNum++;
+        $contestants[] = $row;
+    }
+} catch (Exception $e) {
+    error_log("Contestants query error: " . $e->getMessage());
+}
+
+// 3. Recent Verified Payments (Fail-Safe)
+$recentPayments = [];
+try {
+    $paymentsStmt = $pdo->query("
+        SELECT p.*, u.full_name AS contestant_name, u.username AS contestant_username
+        FROM payments p
+        LEFT JOIN users u ON p.user_id = u.id
+        ORDER BY p.created_at DESC 
+        LIMIT 25
+    ");
+    $recentPayments = $paymentsStmt->fetchAll();
+} catch (Exception $e) {
+    $recentPayments = [];
+}
+
+// 4. Competitions (Fail-Safe)
+$competitions = [];
+try {
+    $competitions = $pdo->query("SELECT * FROM competitions ORDER BY created_at DESC")->fetchAll();
+} catch (Exception $e) {
+    $competitions = [];
+}
 
 $currentStage = Settings::getCurrentStage();
 $isRegOpen = Settings::isRegistrationOpen();

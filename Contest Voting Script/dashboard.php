@@ -41,35 +41,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
     }
 }
 
-// Calculate Leaderboard Position
-$rankStmt = $pdo->prepare("
-    SELECT id, vote_count, 
-           RANK() OVER (ORDER BY vote_count DESC) AS ranking 
-    FROM users 
-    WHERE is_admin = 0
-");
-$rankStmt->execute();
-$rankings = $rankStmt->fetchAll();
-
+// Calculate Leaderboard Position (Cross-Version Safe)
 $userRank = 1;
-$totalContestants = count($rankings);
-foreach ($rankings as $r) {
-    if ((int)$r['id'] === $userId) {
-        $userRank = (int)$r['ranking'];
-        break;
+$totalContestants = 0;
+try {
+    $rankStmt = $pdo->query("SELECT id, vote_count FROM users WHERE is_admin = 0 ORDER BY vote_count DESC");
+    $rankings = $rankStmt->fetchAll();
+    $totalContestants = count($rankings);
+    $posCounter = 1;
+    foreach ($rankings as $r) {
+        if ((int)$r['id'] === $userId) {
+            $userRank = $posCounter;
+            break;
+        }
+        $posCounter++;
     }
+} catch (Exception $e) {
+    $userRank = 1;
 }
 
-// Recent Supporter Votes
-$votesStmt = $pdo->prepare("
-    SELECT vote_count, amount, voter_name, voter_email, created_at 
-    FROM votes 
-    WHERE user_id = :id 
-    ORDER BY created_at DESC 
-    LIMIT 10
-");
-$votesStmt->execute([':id' => $userId]);
-$recentVotes = $votesStmt->fetchAll();
+// Recent Supporter Votes (Fail-Safe)
+$recentVotes = [];
+try {
+    $votesStmt = $pdo->prepare("
+        SELECT vote_count, amount, voter_name, voter_email, created_at 
+        FROM votes 
+        WHERE user_id = :id 
+        ORDER BY created_at DESC 
+        LIMIT 10
+    ");
+    $votesStmt->execute([':id' => $userId]);
+    $recentVotes = $votesStmt->fetchAll();
+} catch (Exception $e) {
+    $recentVotes = [];
+}
 
 $currentStage = Settings::getCurrentStage();
 $endTime = Settings::getCompetitionEndTime();

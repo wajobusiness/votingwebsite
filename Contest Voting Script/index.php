@@ -22,15 +22,24 @@ $bannerImage = $bannerRow['image_path'] ?? 'assets/images/banner.jpg';
 $compStmt = $pdo->query("SELECT * FROM competitions WHERE status = 'active' ORDER BY created_at DESC");
 $competitions = $compStmt->fetchAll();
 
-// 4. Fetch All Contestants Ordered by Vote Count Descending
-$contestantsStmt = $pdo->query("
-    SELECT id, username, full_name, photo, vote_count,
-           RANK() OVER (ORDER BY vote_count DESC) AS position
-    FROM users 
-    WHERE is_admin = 0 AND is_active = 1
-    ORDER BY vote_count DESC
-");
-$contestants = $contestantsStmt->fetchAll();
+// 4. Fetch All Contestants Ordered by Vote Count Descending (Fail-Safe & Cross-Version)
+$contestants = [];
+try {
+    $contestantsStmt = $pdo->query("
+        SELECT id, username, full_name, photo, vote_count
+        FROM users 
+        WHERE is_admin = 0 AND is_active = 1
+        ORDER BY vote_count DESC
+    ");
+    $rawList = $contestantsStmt->fetchAll();
+    $pos = 1;
+    foreach ($rawList as $item) {
+        $item['position'] = $pos++;
+        $contestants[] = $item;
+    }
+} catch (Exception $e) {
+    error_log("Contestants query error on index: " . $e->getMessage());
+}
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">

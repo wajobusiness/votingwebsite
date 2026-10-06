@@ -20,22 +20,21 @@ if (!$contestant) {
     exit();
 }
 
-// Calculate Dynamic Position on Leaderboard
-$rankStmt = $pdo->prepare("
-    SELECT id, vote_count, 
-           RANK() OVER (ORDER BY vote_count DESC) AS position 
-    FROM users 
-    WHERE is_admin = 0
-");
-$rankStmt->execute();
-$allUsers = $rankStmt->fetchAll();
-
+// Calculate Dynamic Position on Leaderboard (Cross-Version Safe)
 $position = 1;
-foreach ($allUsers as $row) {
-    if ((int)$row['id'] === $userId) {
-        $position = (int)$row['position'];
-        break;
+try {
+    $rankStmt = $pdo->query("SELECT id, vote_count FROM users WHERE is_admin = 0 ORDER BY vote_count DESC");
+    $allUsers = $rankStmt->fetchAll();
+    $posCounter = 1;
+    foreach ($allUsers as $row) {
+        if ((int)$row['id'] === $userId) {
+            $position = $posCounter;
+            break;
+        }
+        $posCounter++;
     }
+} catch (Exception $e) {
+    $position = 1;
 }
 
 $siteTitle = Settings::get('site_title', 'Crown Night Star');
