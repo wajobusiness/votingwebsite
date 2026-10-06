@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `phone_number` VARCHAR(25) NOT NULL,
   `photo` VARCHAR(255) DEFAULT 'default_avatar.png',
   `bio` TEXT DEFAULT NULL,
+  `video_url` VARCHAR(500) DEFAULT NULL,
   `vote_count` INT(11) DEFAULT 0,
   `is_admin` TINYINT(1) DEFAULT 0,
   `is_active` TINYINT(1) DEFAULT 1,

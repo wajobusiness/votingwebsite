@@ -465,7 +465,14 @@ $currency = Settings::getCurrencySymbol();
                                             </td>
                                             <td>
                                                 <div class="fw-bold text-white"><?= e($c['full_name']) ?></div>
-                                                <div class="text-secondary small">@<?= e($c['username']) ?></div>
+                                                <div class="text-secondary small">
+                                                    @<?= e($c['username']) ?>
+                                                    <?php if (!empty($c['video_url'])): ?>
+                                                        <a href="<?= e($c['video_url']) ?>" target="_blank" class="badge bg-danger text-white ms-1 text-decoration-none" title="Watch Video">
+                                                            <i class="fas fa-play me-1"></i> Video
+                                                        </a>
+                                                    <?php endif; ?>
+                                                </div>
                                             </td>
                                             <td>
                                                 <div><?= e($c['email']) ?></div>

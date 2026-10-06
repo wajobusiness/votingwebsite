@@ -243,6 +243,20 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
             <span id="timerText">Calculating time...</span>
         </div>
 
+        <!-- Contestant Video Showcase (YouTube / Instagram / TikTok) -->
+        <?php if (!empty($contestant['video_url'])): ?>
+            <div class="text-start mt-3 mb-2 p-3 rounded-4" style="background: rgba(15, 12, 32, 0.7); border: 1px solid rgba(255, 215, 0, 0.25);">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-2 text-warning fw-bold small">
+                        <i class="fas fa-play-circle fs-5"></i>
+                        <span>CONTESTANT PERFORMANCE VIDEO</span>
+                    </div>
+                    <span class="badge bg-warning text-dark px-2 py-1" style="font-size: 10px;">Official Entry</span>
+                </div>
+                <?= VideoHelper::render($contestant['video_url'], $contestant['full_name'] . ' Performance Video') ?>
+            </div>
+        <?php endif; ?>
+
         <!-- Voting Interface -->
         <?php if (!$isVotingOpen): ?>
             <div class="alert alert-warning mt-4 border-0" style="background: rgba(255, 193, 7, 0.15); color: #ffd700;">

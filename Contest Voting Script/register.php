@@ -22,6 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phoneNumber = trim($_POST['phone_number'] ?? '');
         $password    = $_POST['password'] ?? '';
         $bio         = trim($_POST['bio'] ?? '');
+        $videoUrl    = trim($_POST['video_url'] ?? '');
+        if (!empty($videoUrl) && !filter_var($videoUrl, FILTER_VALIDATE_URL)) {
+            $videoUrl = null;
+        }
 
         // Validation
         if (empty($fullName) || empty($username) || empty($email) || empty($password)) {
@@ -36,6 +40,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Please upload a profile photo for the competition.';
         } else {
             $pdo = DB::pdo();
+
+            // Auto-ensure video_url column exists
+            try {
+                $pdo->query("SELECT video_url FROM users LIMIT 1");
+            } catch (Exception $e) {
+                try {
+                    $pdo->exec("ALTER TABLE users ADD COLUMN video_url VARCHAR(500) DEFAULT NULL");
+                } catch (Exception $e2) {
+                    // Ignored
+                }
+            }
 
             // Check if username or email is already taken
             $checkStmt = $pdo->prepare("SELECT id FROM users WHERE username = :u OR email = :e LIMIT 1");
@@ -56,9 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         try {
                             $insertStmt = $pdo->prepare("
                                 INSERT INTO users (
-                                    username, email, password, full_name, phone_number, photo, bio, vote_count, is_admin, is_active
+                                    username, email, password, full_name, phone_number, photo, bio, video_url, vote_count, is_admin, is_active
                                 ) VALUES (
-                                    :username, :email, :password, :full_name, :phone_number, :photo, :bio, 0, 0, 1
+                                    :username, :email, :password, :full_name, :phone_number, :photo, :bio, :video_url, 0, 0, 1
                                 )
                             ");
 
@@ -69,10 +84,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':full_name'    => $fullName,
                                 ':phone_number' => $phoneNumber,
                                 ':photo'        => $photoFilename,
-                                ':bio'          => $bio
+                                ':bio'          => $bio,
+                                ':video_url'    => !empty($videoUrl) ? $videoUrl : null
                             ]);
                         } catch (Exception $subEx) {
-                            // Fallback if is_active or phone_number column is slightly different
+                            // Fallback if schema variations exist
                             $insertStmt = $pdo->prepare("
                                 INSERT INTO users (
                                     username, email, password, full_name, photo, vote_count, is_admin
@@ -286,6 +302,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mb-3">
                 <label class="form-label text-light small fw-semibold" for="password">Password *</label>
                 <input type="password" id="password" name="password" required class="form-control" placeholder="Create a secure password (min 6 characters)">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label text-light small fw-semibold" for="video_url">
+                    Performance Video Link <span class="text-secondary fw-normal">(Optional)</span>
+                </label>
+                <div class="input-group">
+                    <span class="input-group-text bg-dark border-secondary text-warning"><i class="fas fa-video"></i></span>
+                    <input type="url" id="video_url" name="video_url" class="form-control" placeholder="YouTube or Instagram Reel URL" value="<?= e($_POST['video_url'] ?? '') ?>">
+                </div>
+                <div class="form-text text-secondary" style="font-size: 11px;">You can also add or update this anytime on your dashboard.</div>
             </div>
 
             <div class="d-grid mb-3">

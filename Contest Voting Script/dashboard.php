@@ -14,6 +14,17 @@ $userId = (int)$user['id'];
 $successMessage = '';
 $errorMessage = '';
 
+// Auto-ensure video_url column exists in users table
+try {
+    $pdo->query("SELECT video_url FROM users LIMIT 1");
+} catch (Exception $e) {
+    try {
+        $pdo->exec("ALTER TABLE users ADD COLUMN video_url VARCHAR(500) DEFAULT NULL");
+    } catch (Exception $e2) {
+        // Ignored
+    }
+}
+
 // Handle Photo Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
     if (!Security::validateCsrf()) {
@@ -40,6 +51,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
         } else {
             $errorMessage = $upload['error'];
         }
+    }
+}
+
+// Handle Video URL Update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_video') {
+    $videoUrl = trim($_POST['video_url'] ?? '');
+
+    if (empty($videoUrl)) {
+        $stmt = $pdo->prepare("UPDATE users SET video_url = NULL WHERE id = :id");
+        $stmt->execute([':id' => $userId]);
+        $user['video_url'] = null;
+        $successMessage = "Showcase video link removed.";
+    } elseif (!filter_var($videoUrl, FILTER_VALIDATE_URL)) {
+        $errorMessage = "Please enter a valid video link (e.g., https://youtu.be/... or https://instagram.com/reel/...).";
+    } else {
+        $stmt = $pdo->prepare("UPDATE users SET video_url = :url WHERE id = :id");
+        $stmt->execute([':url' => $videoUrl, ':id' => $userId]);
+        $user['video_url'] = $videoUrl;
+        $successMessage = "Showcase video link updated! It is now live on your voting page.";
     }
 }
 
@@ -290,6 +320,51 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Showcase Video / Performance Link Hub -->
+            <div class="dashboard-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="fw-bold text-white mb-0">
+                        <i class="fas fa-play-circle text-warning me-2"></i> Showcase Video / Performance
+                    </h5>
+                    <?php if (!empty($user['video_url'])): ?>
+                        <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i> Live on Voting Page</span>
+                    <?php endif; ?>
+                </div>
+                <p class="text-secondary small mb-3">Add a video link (YouTube video/shorts, Instagram Reel/post, TikTok, Vimeo, or direct video). When added, it automatically displays on your public voting profile so supporters can watch your performance before voting!</p>
+
+                <form method="POST" action="dashboard.php" class="mb-2">
+                    <?= Security::csrfField() ?>
+                    <input type="hidden" name="action" value="update_video">
+
+                    <label class="form-label text-light small fw-semibold">Video Link (YouTube, Instagram Reel, TikTok, Vimeo)</label>
+                    <div class="input-group mb-2">
+                        <span class="input-group-text bg-dark border-secondary text-warning"><i class="fas fa-video"></i></span>
+                        <input type="url" name="video_url" id="videoUrlInput" class="form-control" placeholder="e.g. https://www.youtube.com/watch?v=... or https://www.instagram.com/reel/..." value="<?= e($user['video_url'] ?? '') ?>">
+                        <button type="submit" class="btn btn-warning fw-bold"><i class="fas fa-save me-1"></i> Save Video</button>
+                    </div>
+                    <div class="form-text text-secondary" style="font-size: 11px;">
+                        Supported formats: <code>youtube.com</code>, <code>youtu.be</code>, <code>instagram.com/reel/</code>, <code>tiktok.com</code>, <code>vimeo.com</code>, or <code>.mp4</code>. Leave empty and save to remove.
+                    </div>
+                </form>
+
+                <?php if (!empty($user['video_url'])): ?>
+                    <div class="mt-3 pt-3 border-top border-secondary border-opacity-25">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small text-secondary fw-semibold text-uppercase">Live Video Player Preview</span>
+                            <form method="POST" action="dashboard.php" onsubmit="return confirm('Remove your showcase video link?');" class="d-inline">
+                                <?= Security::csrfField() ?>
+                                <input type="hidden" name="action" value="update_video">
+                                <input type="hidden" name="video_url" value="">
+                                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 11px;">
+                                    <i class="fas fa-trash-alt me-1"></i> Remove Video
+                                </button>
+                            </form>
+                        </div>
+                        <?= VideoHelper::render($user['video_url'], $user['full_name'] . ' Showcase Video') ?>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <!-- Share & Promotion Hub -->
