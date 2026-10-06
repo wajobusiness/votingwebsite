@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-$siteTitle = Settings::get('site_title', 'Most Beautiful Discovery');
+$siteTitle = Settings::get('site_title', 'Crown Night Star');
 $supportEmail = Settings::get('support_email', 'hello@theusersportal.cloud');
 $supportPhone = Settings::get('support_phone', '09067619370');
 $isRegistrationOpen = Settings::isRegistrationOpen();

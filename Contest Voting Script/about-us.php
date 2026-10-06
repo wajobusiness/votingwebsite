@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-$siteTitle = Settings::get('site_title', 'Most Beautiful Discovery');
+$siteTitle = Settings::get('site_title', 'Crown Night Star');
 $isRegistrationOpen = Settings::isRegistrationOpen();
 $stageName = Settings::getCurrentStage();
 ?>

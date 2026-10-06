@@ -10,7 +10,7 @@ $isRegistrationOpen = Settings::isRegistrationOpen();
 $isVotingOpen = Settings::isVotingOpen();
 $votePrice = Settings::getVotePrice();
 $currencySymbol = Settings::getCurrencySymbol();
-$siteTitle = Settings::get('site_title', 'Most Beautiful Discovery');
+$siteTitle = Settings::get('site_title', 'Crown Night Star');
 $siteTagline = Settings::get('site_tagline', 'Most Anticipated Online Contest');
 
 // 2. Fetch Latest Active Hero Banner

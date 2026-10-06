@@ -38,7 +38,7 @@ foreach ($allUsers as $row) {
     }
 }
 
-$siteTitle = Settings::get('site_title', 'Most Beautiful Discovery');
+$siteTitle = Settings::get('site_title', 'Crown Night Star');
 $currentStage = Settings::getCurrentStage();
 $competitionEndTime = Settings::getCompetitionEndTime();
 $isVotingOpen = Settings::isVotingOpen();

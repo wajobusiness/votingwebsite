@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-$siteTitle = Settings::get('site_title', 'Most Beautiful Discovery');
+$siteTitle = Settings::get('site_title', 'Crown Night Star');
 $votePrice = Settings::getVotePrice();
 $currencySymbol = Settings::getCurrencySymbol();
 $isRegistrationOpen = Settings::isRegistrationOpen();

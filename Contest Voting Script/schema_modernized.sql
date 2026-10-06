@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `settings` (
 
 -- Seed default settings
 INSERT INTO `settings` (`name`, `value`) VALUES
-('site_title', 'Most Beautiful Discovery'),
+('site_title', 'Crown Night Star'),
 ('site_tagline', 'Most Anticipated Online Contest'),
 ('currency_symbol', '₦'),
 ('currency_code', 'NGN'),
