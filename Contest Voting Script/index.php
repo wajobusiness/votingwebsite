@@ -1,0 +1,478 @@
+<?php
+require_once __DIR__ . '/config.php';
+
+$pdo = DB::pdo();
+
+// 1. Fetch Dynamic Stage & Settings
+$stageName = Settings::getCurrentStage();
+$competitionEndTime = Settings::getCompetitionEndTime();
+$isRegistrationOpen = Settings::isRegistrationOpen();
+$isVotingOpen = Settings::isVotingOpen();
+$votePrice = Settings::getVotePrice();
+$currencySymbol = Settings::getCurrencySymbol();
+$siteTitle = Settings::get('site_title', 'Most Beautiful Discovery');
+$siteTagline = Settings::get('site_tagline', 'Most Anticipated Online Contest');
+
+// 2. Fetch Latest Active Hero Banner
+$bannerStmt = $pdo->query("SELECT image_path FROM banner WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+$bannerRow = $bannerStmt->fetch();
+$bannerImage = $bannerRow['image_path'] ?? 'assets/images/banner.jpg';
+
+// 3. Fetch Featured Competitions
+$compStmt = $pdo->query("SELECT * FROM competitions WHERE status = 'active' ORDER BY created_at DESC");
+$competitions = $compStmt->fetchAll();
+
+// 4. Fetch All Contestants Ordered by Vote Count Descending
+$contestantsStmt = $pdo->query("
+    SELECT id, username, full_name, photo, vote_count,
+           RANK() OVER (ORDER BY vote_count DESC) AS position
+    FROM users 
+    WHERE is_admin = 0 AND is_active = 1
+    ORDER BY vote_count DESC
+");
+$contestants = $contestantsStmt->fetchAll();
+?>
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= e($siteTitle) ?> - <?= e($siteTagline) ?></title>
+    <meta name="description" content="Vote and support your favorite contestants in <?= e($siteTitle) ?>.">
+
+    <!-- OpenGraph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<?= e($siteTitle) ?> - <?= e($siteTagline) ?>">
+    <meta property="og:description" content="Vote and support your favorite contestants in <?= e($siteTitle) ?>.">
+    <meta property="og:image" content="<?= e($bannerImage) ?>">
+
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="assets2/css/all.min.css">
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: linear-gradient(135deg, #090714 0%, #130f26 50%, #0d0a1b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .navbar-custom {
+            background: rgba(14, 11, 30, 0.9);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+        }
+        .hero-section {
+            padding: 60px 0 40px;
+            text-align: center;
+            position: relative;
+        }
+        .stage-pill {
+            display: inline-block;
+            background: rgba(255, 215, 0, 0.12);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            color: #ffd700;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 20px;
+            border-radius: 50px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+        .hero-title {
+            font-size: clamp(32px, 5vw, 54px);
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff 0%, #ffd700 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 16px;
+        }
+        .countdown-box {
+            background: rgba(25, 20, 50, 0.8);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 16px;
+            padding: 16px 24px;
+            display: inline-block;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            margin-bottom: 30px;
+        }
+        .countdown-digits {
+            font-size: 26px;
+            font-weight: 800;
+            color: #ffd700;
+            letter-spacing: 1px;
+        }
+        .banner-wrapper {
+            max-width: 960px;
+            margin: 0 auto 50px;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+        }
+        .banner-wrapper img {
+            width: 100%;
+            max-height: 420px;
+            object-fit: cover;
+            display: block;
+        }
+        .stage-card {
+            background: rgba(22, 17, 44, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            height: 100%;
+            transition: all 0.3s ease;
+        }
+        .stage-card:hover {
+            border-color: rgba(255, 215, 0, 0.4);
+            transform: translateY(-4px);
+        }
+        .contestant-card {
+            background: rgba(22, 17, 44, 0.85);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 18px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .contestant-card:hover {
+            transform: translateY(-6px);
+            border-color: #ffd700;
+            box-shadow: 0 15px 35px rgba(255, 215, 0, 0.2);
+        }
+        .card-img-wrap {
+            position: relative;
+            width: 100%;
+            padding-top: 100%; /* 1:1 Aspect ratio */
+            background: #0f0c20;
+            overflow: hidden;
+        }
+        .card-img-wrap img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+        }
+        .contestant-card:hover .card-img-wrap img {
+            transform: scale(1.05);
+        }
+        .rank-tag {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            color: #ffd700;
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            font-size: 12px;
+            font-weight: 800;
+            padding: 4px 12px;
+            border-radius: 50px;
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, #ffd700 0%, #d4af37 100%);
+            color: #0d1117;
+            font-weight: 700;
+            border-radius: 10px;
+            border: none;
+            padding: 10px 16px;
+            text-decoration: none;
+            text-align: center;
+            display: block;
+            transition: all 0.3s ease;
+        }
+        .btn-gold:hover {
+            background: linear-gradient(135deg, #ffe033 0%, #e5bd3b 100%);
+            color: #0d1117;
+            transform: translateY(-1px);
+        }
+        .search-bar {
+            background: rgba(22, 17, 44, 0.9);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 50px;
+            padding: 12px 24px;
+            color: #fff;
+            width: 100%;
+            max-width: 480px;
+            margin: 0 auto 30px;
+        }
+        .search-bar:focus {
+            background: rgba(22, 17, 44, 1);
+            border-color: #ffd700;
+            box-shadow: 0 0 0 0.25rem rgba(255, 215, 0, 0.2);
+            color: #fff;
+            outline: none;
+        }
+        footer {
+            background: #070510;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 50px 0 30px;
+            margin-top: 80px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top py-3">
+    <div class="container">
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center gap-2 fs-4" href="index.php">
+            <i class="fas fa-crown text-warning"></i> <?= e($siteTitle) ?>
+        </a>
+        <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navContent">
+            <ul class="navbar-nav mx-auto mb-2 mb-lg-0 gap-3">
+                <li class="nav-item"><a class="nav-link text-white fw-semibold" href="index.php">Home</a></li>
+                <li class="nav-item"><a class="nav-link text-light" href="#contestants">Contestants</a></li>
+                <li class="nav-item"><a class="nav-link text-light" href="about-us.php">About Contest</a></li>
+                <li class="nav-item"><a class="nav-link text-light" href="terms.php">Terms & Rules</a></li>
+                <li class="nav-item"><a class="nav-link text-light" href="contact-us.php">Contact Us</a></li>
+            </ul>
+
+            <div class="d-flex align-items-center gap-2">
+                <?php if (Auth::isUserLoggedIn()): ?>
+                    <a href="dashboard.php" class="btn btn-warning btn-sm fw-bold"><i class="fas fa-user-circle me-1"></i> My Dashboard</a>
+                <?php else: ?>
+                    <a href="login.php" class="btn btn-outline-light btn-sm"><i class="fas fa-sign-in-alt me-1"></i> Contestant Login</a>
+                    <?php if ($isRegistrationOpen): ?>
+                        <a href="register.php" class="btn btn-warning btn-sm fw-bold"><i class="fas fa-sparkles me-1"></i> Join Contest</a>
+                    <?php endif; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container">
+        <div class="stage-pill">
+            <i class="fas fa-layer-group me-1"></i> <?= e($stageName) ?> is Live
+        </div>
+
+        <h1 class="hero-title"><?= e($siteTitle) ?></h1>
+        <p class="text-secondary fs-5 mb-4 mx-auto" style="max-width: 680px;">
+            Empowering participants through beauty, talent, and public community votes. Support your favorite contestant today!
+        </p>
+
+        <!-- Countdown Timer Box -->
+        <div class="countdown-box">
+            <div class="text-secondary small fw-bold text-uppercase mb-1">Voting Period Closes In:</div>
+            <div class="countdown-digits" id="liveTimer">Calculating remaining time...</div>
+        </div>
+
+        <!-- Banner Image -->
+        <?php if (!empty($bannerImage)): ?>
+            <div class="banner-wrapper">
+                <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Banner">
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
+
+<!-- Contest Rules & Stages -->
+<section class="py-5" style="background: rgba(10, 8, 22, 0.6);">
+    <div class="container">
+        <div class="text-center mb-5">
+            <h2 class="fw-bold text-white mb-2">How The Contest Works</h2>
+            <p class="text-secondary">Official 3-stage competition structure and rules</p>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="stage-card">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <span class="badge bg-warning text-dark fw-bold px-3 py-2">Stage 1</span>
+                        <i class="fas fa-users text-warning fs-4"></i>
+                    </div>
+                    <h5 class="fw-bold text-white mb-2">Open Stage (7 Days)</h5>
+                    <p class="text-secondary small mb-0">
+                        Top 50 contestants with a minimum of 150 votes qualify and advance to the next stage.
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="stage-card">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <span class="badge bg-info text-dark fw-bold px-3 py-2">Stage 2</span>
+                        <i class="fas fa-medal text-info fs-4"></i>
+                    </div>
+                    <h5 class="fw-bold text-white mb-2">Semi-Finals (7 Days)</h5>
+                    <p class="text-secondary small mb-0">
+                        Top 30 contestants with a minimum of 250 votes advance to the grand final stage.
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="stage-card">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <span class="badge bg-success text-white fw-bold px-3 py-2">Stage 3</span>
+                        <i class="fas fa-trophy text-success fs-4"></i>
+                    </div>
+                    <h5 class="fw-bold text-white mb-2">Grand Finale (7 Days)</h5>
+                    <p class="text-secondary small mb-0">
+                        Final voting round. Contestant with the highest cumulative votes is crowned champion!
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Contestants Leaderboard -->
+<section class="py-5" id="contestants">
+    <div class="container">
+        <div class="text-center mb-4">
+            <span class="badge bg-warning text-dark fw-bold px-3 py-2 mb-2 text-uppercase">Live Standings</span>
+            <h2 class="fw-bold text-white mb-2">Meet Our Contestants</h2>
+            <p class="text-secondary">Vote for your favorite contestant to help them advance</p>
+
+            <!-- Real-time Filter / Search Input -->
+            <input type="text" id="contestantSearch" class="search-bar" placeholder="🔍 Search contestant by name or username..." onkeyup="filterContestants()">
+        </div>
+
+        <?php if (empty($contestants)): ?>
+            <div class="text-center py-5">
+                <i class="fas fa-user-friends fa-3x text-secondary mb-3"></i>
+                <h5 class="text-secondary">No contestants registered yet.</h5>
+                <?php if ($isRegistrationOpen): ?>
+                    <a href="register.php" class="btn btn-warning mt-2 fw-bold">Be the First to Register!</a>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <div class="row g-4" id="contestantsGrid">
+                <?php foreach ($contestants as $c): ?>
+                    <div class="col-6 col-md-4 col-lg-3 contestant-item" data-name="<?= strtolower(e($c['full_name'] . ' ' . $c['username'])) ?>">
+                        <div class="contestant-card">
+                            <div class="card-img-wrap">
+                                <div class="rank-tag">#<?= (int)$c['position'] ?></div>
+                                <img src="uploads/<?= e($c['photo']) ?>" alt="<?= e($c['full_name']) ?>" loading="lazy">
+                            </div>
+                            <div class="p-3 d-flex flex-column flex-grow-1 justify-content-between">
+                                <div>
+                                    <h6 class="fw-bold text-white mb-1 text-truncate" title="<?= e($c['full_name']) ?>"><?= e($c['full_name']) ?></h6>
+                                    <p class="text-secondary small mb-2 text-truncate">@<?= e($c['username']) ?></p>
+                                </div>
+                                <div class="pt-2 border-top border-secondary border-opacity-25">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="small text-secondary fw-semibold">Votes</span>
+                                        <span class="fw-bold text-warning"><?= number_format((int)$c['vote_count']) ?></span>
+                                    </div>
+                                    <a href="profile.php?id=<?= $c['id'] ?>" class="btn-gold">
+                                        <i class="fas fa-vote-yea me-1"></i> Vote Now
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <div class="container">
+        <div class="row gy-4">
+            <div class="col-lg-4">
+                <h5 class="text-white fw-bold mb-3"><i class="fas fa-crown text-warning me-2"></i> <?= e($siteTitle) ?></h5>
+                <p class="text-secondary small mb-0">
+                    Transparent, secure online voting competition celebrating excellence, talent, and beauty.
+                </p>
+            </div>
+            <div class="col-6 col-lg-2">
+                <h6 class="text-white fw-bold mb-3">Quick Links</h6>
+                <ul class="list-unstyled small">
+                    <li class="mb-2"><a href="index.php" class="text-secondary text-decoration-none">Home</a></li>
+                    <li class="mb-2"><a href="#contestants" class="text-secondary text-decoration-none">Contestants</a></li>
+                    <li class="mb-2"><a href="about-us.php" class="text-secondary text-decoration-none">About Us</a></li>
+                    <li class="mb-2"><a href="terms.php" class="text-secondary text-decoration-none">Terms & Rules</a></li>
+                </ul>
+            </div>
+            <div class="col-6 col-lg-2">
+                <h6 class="text-white fw-bold mb-3">Contestants</h6>
+                <ul class="list-unstyled small">
+                    <li class="mb-2"><a href="login.php" class="text-secondary text-decoration-none">Sign In</a></li>
+                    <?php if ($isRegistrationOpen): ?>
+                        <li class="mb-2"><a href="register.php" class="text-secondary text-decoration-none">Register</a></li>
+                    <?php endif; ?>
+                    <li class="mb-2"><a href="dashboard.php" class="text-secondary text-decoration-none">My Dashboard</a></li>
+                </ul>
+            </div>
+            <div class="col-lg-4">
+                <h6 class="text-white fw-bold mb-3">Contact Support</h6>
+                <p class="text-secondary small mb-1"><i class="fas fa-envelope text-warning me-2"></i> <?= e(Settings::get('support_email', 'hello@theusersportal.cloud')) ?></p>
+                <p class="text-secondary small mb-0"><i class="fas fa-phone text-warning me-2"></i> <?= e(Settings::get('support_phone', '09067619370')) ?></p>
+            </div>
+        </div>
+        <hr class="border-secondary opacity-25 my-4">
+        <div class="text-center text-secondary small">
+            &copy; <?= date('Y') ?> <strong><?= e($siteTitle) ?></strong>. All Rights Reserved.
+        </div>
+    </div>
+</footer>
+
+<script src="assets2/js/bootstrap.bundle.min.js"></script>
+<script>
+// Search Filter
+function filterContestants() {
+    const query = document.getElementById('contestantSearch').value.toLowerCase().trim();
+    const items = document.querySelectorAll('.contestant-item');
+
+    items.forEach(item => {
+        const name = item.getAttribute('data-name');
+        if (name.includes(query)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+// Countdown Engine
+function initCountdown(endTimeStr) {
+    const timerEl = document.getElementById('liveTimer');
+    const endDate = new Date(endTimeStr).getTime();
+
+    if (isNaN(endDate)) {
+        timerEl.innerText = "Active Stage";
+        return;
+    }
+
+    const timer = setInterval(() => {
+        const now = new Date().getTime();
+        const diff = endDate - now;
+
+        if (diff <= 0) {
+            clearInterval(timer);
+            timerEl.innerText = "Voting has concluded.";
+            return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        timerEl.innerText = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    }, 1000);
+}
+
+initCountdown('<?= e($competitionEndTime) ?>');
+</script>
+
+</body>
+</html>
