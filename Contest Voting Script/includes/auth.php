@@ -14,9 +14,13 @@ class Auth {
     public static function attemptUserLogin(string $login, string $password): array {
         Security::startSession();
 
+        $cleanLogin = trim($login);
         $pdo = DB::pdo();
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE (email = :login OR username = :login) AND is_admin = 0 LIMIT 1");
-        $stmt->execute([':login' => trim($login)]);
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE (email = :email OR username = :username) AND is_admin = 0 LIMIT 1");
+        $stmt->execute([
+            ':email'    => $cleanLogin,
+            ':username' => $cleanLogin
+        ]);
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
@@ -38,9 +42,13 @@ class Auth {
     public static function attemptAdminLogin(string $login, string $password): array {
         Security::startSession();
 
+        $cleanLogin = trim($login);
         $pdo = DB::pdo();
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE (email = :login OR username = :login) AND is_admin = 1 LIMIT 1");
-        $stmt->execute([':login' => trim($login)]);
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE (email = :email OR username = :username) AND is_admin = 1 LIMIT 1");
+        $stmt->execute([
+            ':email'    => $cleanLogin,
+            ':username' => $cleanLogin
+        ]);
         $admin = $stmt->fetch();
 
         if ($admin && password_verify($password, $admin['password'])) {
