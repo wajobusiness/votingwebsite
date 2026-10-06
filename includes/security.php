@@ -12,19 +12,37 @@ class Security {
      */
     public static function startSession(): void {
         if (session_status() === PHP_SESSION_NONE) {
-            $isHttps = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
-                       (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+            $isHttps = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') ||
+                       (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') ||
+                       (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on') ||
+                       (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos($_SERVER['HTTP_CF_VISITOR'], '"https"') !== false) ||
+                       (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
 
-            session_set_cookie_params([
-                'lifetime' => (int)Env::get('SESSION_LIFETIME', 86400),
-                'path'     => '/',
-                'domain'   => '',
-                'secure'   => $isHttps,
-                'httponly' => true,
-                'samesite' => 'Lax'
-            ]);
+            $lifetime = (int)Env::get('SESSION_LIFETIME', 86400);
 
-            session_start();
+            if (!headers_sent()) {
+                if (PHP_VERSION_ID >= 70300) {
+                    session_set_cookie_params([
+                        'lifetime' => $lifetime,
+                        'path'     => '/',
+                        'secure'   => $isHttps,
+                        'httponly' => true,
+                        'samesite' => 'Lax'
+                    ]);
+                } else {
+                    session_set_cookie_params($lifetime, '/', '', $isHttps, true);
+                }
+            }
+
+            @session_start();
+        }
+
+        if (empty($_SESSION['csrf_token'])) {
+            try {
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            } catch (Exception $e) {
+                $_SESSION['csrf_token'] = md5(uniqid((string)mt_rand(), true));
+            }
         }
     }
 
@@ -34,7 +52,11 @@ class Security {
     public static function csrfToken(): string {
         self::startSession();
         if (empty($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            try {
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            } catch (Exception $e) {
+                $_SESSION['csrf_token'] = md5(uniqid((string)mt_rand(), true));
+            }
         }
         return $_SESSION['csrf_token'];
     }
@@ -52,6 +74,12 @@ class Security {
      */
     public static function validateCsrf(?string $token = null): bool {
         self::startSession();
+        
+        $csrfEnabled = Env::get('CSRF_PROTECTION', true);
+        if ($csrfEnabled === false || $csrfEnabled === 'false' || $csrfEnabled === '0' || $csrfEnabled === 0) {
+            return true;
+        }
+
         if ($token === null) {
             $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
         }
@@ -69,6 +97,12 @@ class Security {
     public static function requireCsrf(): void {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!self::validateCsrf()) {
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                    header('Content-Type: application/json');
+                    http_response_code(403);
+                    echo json_encode(['status' => 'error', 'message' => 'Security session expired. Please refresh the page.']);
+                    exit();
+                }
                 http_response_code(403);
                 die("Security Validation Failed: Invalid or missing CSRF token. Please refresh the page.");
             }

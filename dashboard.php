@@ -16,28 +16,30 @@ $errorMessage = '';
 
 // Handle Photo Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
-    Security::requireCsrf();
-
-    $upload = Security::handleFileUpload($_FILES['photo'], __DIR__ . '/uploads/', ['jpg', 'jpeg', 'png', 'webp'], 5);
-
-    if ($upload['success']) {
-        $newPhoto = $upload['filename'];
-
-        // Optionally delete old photo if not default
-        if (!empty($user['photo']) && $user['photo'] !== 'default_avatar.png') {
-            $oldPath = __DIR__ . '/uploads/' . $user['photo'];
-            if (file_exists($oldPath) && is_file($oldPath)) {
-                @unlink($oldPath);
-            }
-        }
-
-        $stmt = $pdo->prepare("UPDATE users SET photo = :photo WHERE id = :id");
-        $stmt->execute([':photo' => $newPhoto, ':id' => $userId]);
-
-        $user['photo'] = $newPhoto;
-        $successMessage = "Profile photo updated successfully!";
+    if (!Security::validateCsrf()) {
+        $errorMessage = 'Security session expired. Please refresh the page and try again.';
     } else {
-        $errorMessage = $upload['error'];
+        $upload = Security::handleFileUpload($_FILES['photo'], __DIR__ . '/uploads/', ['jpg', 'jpeg', 'png', 'webp'], 5);
+
+        if ($upload['success']) {
+            $newPhoto = $upload['filename'];
+
+            // Optionally delete old photo if not default
+            if (!empty($user['photo']) && $user['photo'] !== 'default_avatar.png') {
+                $oldPath = __DIR__ . '/uploads/' . $user['photo'];
+                if (file_exists($oldPath) && is_file($oldPath)) {
+                    @unlink($oldPath);
+                }
+            }
+
+            $stmt = $pdo->prepare("UPDATE users SET photo = :photo WHERE id = :id");
+            $stmt->execute([':photo' => $newPhoto, ':id' => $userId]);
+
+            $user['photo'] = $newPhoto;
+            $successMessage = "Profile photo updated successfully!";
+        } else {
+            $errorMessage = $upload['error'];
+        }
     }
 }
 

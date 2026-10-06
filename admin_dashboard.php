@@ -14,10 +14,12 @@ unset($_SESSION['flash_success'], $_SESSION['flash_error']);
 // Unified Admin Action Router (Single POST Dispatcher with CSRF Protection)
 // =========================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    Security::requireCsrf();
-    $action = $_POST['admin_action'] ?? '';
+    if (!Security::validateCsrf()) {
+        $_SESSION['flash_error'] = 'Security session expired. Please refresh and try again.';
+    } else {
+        $action = $_POST['admin_action'] ?? '';
 
-    try {
+        try {
         switch ($action) {
             case 'update_vote_count':
                 $userId = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
@@ -144,9 +146,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['flash_error'] = "Unrecognized administrative action.";
                 break;
         }
-    } catch (Exception $e) {
-        error_log("Admin action exception: " . $e->getMessage());
-        $_SESSION['flash_error'] = "An error occurred: " . $e->getMessage();
+        } catch (Exception $e) {
+            error_log("Admin action exception: " . $e->getMessage());
+            $_SESSION['flash_error'] = "An error occurred: " . $e->getMessage();
+        }
     }
 
     header('Location: admin_dashboard.php');

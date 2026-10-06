@@ -15,9 +15,9 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$isRegistrationOpen) {
         $error = 'Contest registration is currently closed.';
+    } elseif (!Security::validateCsrf()) {
+        $error = 'Security session expired. Please refresh the page and try again.';
     } else {
-        Security::requireCsrf();
-
         $fullName    = trim($_POST['full_name'] ?? '');
         $username    = trim($_POST['username'] ?? '');
         $email       = trim($_POST['email'] ?? '');

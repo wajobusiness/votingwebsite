@@ -10,20 +10,22 @@ if (Auth::isAdminLoggedIn()) {
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    Security::requireCsrf();
-
-    $login = trim($_POST['login'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    if (empty($login) || empty($password)) {
-        $error = 'Please enter both username/email and password.';
+    if (!Security::validateCsrf()) {
+        $error = 'Security session expired. Please try signing in again.';
     } else {
-        $authResult = Auth::attemptAdminLogin($login, $password);
-        if ($authResult['success']) {
-            header('Location: admin_dashboard.php');
-            exit();
+        $login = trim($_POST['login'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        if (empty($login) || empty($password)) {
+            $error = 'Please enter both username/email and password.';
         } else {
-            $error = $authResult['error'];
+            $authResult = Auth::attemptAdminLogin($login, $password);
+            if ($authResult['success']) {
+                header('Location: admin_dashboard.php');
+                exit();
+            } else {
+                $error = $authResult['error'];
+            }
         }
     }
 }
