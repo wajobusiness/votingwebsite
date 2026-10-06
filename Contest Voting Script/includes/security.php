@@ -8,30 +8,18 @@ require_once __DIR__ . '/Env.php';
 class Security {
 
     /**
-     * Start secure PHP session with robust cookie parameters
+     * Start secure PHP session with universal server/proxy compatibility
      */
     public static function startSession(): void {
         if (session_status() === PHP_SESSION_NONE) {
-            $isHttps = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') ||
-                       (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') ||
-                       (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on') ||
-                       (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos($_SERVER['HTTP_CF_VISITOR'], '"https"') !== false) ||
-                       (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443);
-
-            $lifetime = (int)Env::get('SESSION_LIFETIME', 86400);
-
             if (!headers_sent()) {
-                if (PHP_VERSION_ID >= 70300) {
-                    session_set_cookie_params([
-                        'lifetime' => $lifetime,
-                        'path'     => '/',
-                        'secure'   => $isHttps,
-                        'httponly' => true,
-                        'samesite' => 'Lax'
-                    ]);
-                } else {
-                    session_set_cookie_params($lifetime, '/', '', $isHttps, true);
-                }
+                @ini_set('session.use_cookies', '1');
+                @ini_set('session.use_only_cookies', '1');
+                @ini_set('session.cookie_httponly', '1');
+                @ini_set('session.cookie_path', '/');
+                $lifetime = (int)Env::get('SESSION_LIFETIME', 86400);
+                @ini_set('session.gc_maxlifetime', (string)$lifetime);
+                @ini_set('session.cookie_lifetime', (string)$lifetime);
             }
 
             @session_start();
