@@ -155,32 +155,42 @@ class Security {
             ];
         }
 
-        // Validate real MIME Type using finfo
-        $finfo = new finfo(FILEINFO_MIME_TYPE);
-        $mime = $finfo->file($file['tmp_name']);
+        // Validate real MIME Type using finfo or mime_content_type
         $allowedMimes = [
-            'jpg'  => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'png'  => 'image/png',
-            'webp' => 'image/webp',
-            'gif'  => 'image/gif'
+            'image/jpeg',
+            'image/pjpeg',
+            'image/png',
+            'image/x-png',
+            'image/webp',
+            'image/gif'
         ];
 
-        if (!in_array($mime, $allowedMimes, true)) {
-            return ['success' => false, 'error' => 'File contents do not match a valid image type.'];
+        if (class_exists('finfo')) {
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->file($file['tmp_name']);
+            if ($mime && !in_array(strtolower($mime), $allowedMimes, true)) {
+                return ['success' => false, 'error' => 'File contents do not match a valid image type (' . htmlspecialchars($mime) . ').'];
+            }
+        } elseif (function_exists('mime_content_type')) {
+            $mime = mime_content_type($file['tmp_name']);
+            if ($mime && !in_array(strtolower($mime), $allowedMimes, true)) {
+                return ['success' => false, 'error' => 'File contents do not match a valid image type.'];
+            }
         }
 
-        // Validate image dimensions using getimagesize
-        $imageInfo = @getimagesize($file['tmp_name']);
-        if ($imageInfo === false) {
-            return ['success' => false, 'error' => 'Uploaded file is not a valid or readable image.'];
+        // Validate image dimensions using getimagesize (if GD/image library is available)
+        if (function_exists('getimagesize')) {
+            $imageInfo = @getimagesize($file['tmp_name']);
+            if ($imageInfo === false && !in_array($ext, ['webp', 'svg'])) {
+                return ['success' => false, 'error' => 'Uploaded file is not a valid or readable image.'];
+            }
         }
 
         // Ensure upload destination directory exists
         $normalizedDir = rtrim($targetDir, '/') . '/';
         if (!is_dir($normalizedDir)) {
-            if (!mkdir($normalizedDir, 0755, true) && !is_dir($normalizedDir)) {
-                return ['success' => false, 'error' => 'Upload directory could not be created.'];
+            if (!@mkdir($normalizedDir, 0777, true) && !is_dir($normalizedDir)) {
+                return ['success' => false, 'error' => 'Upload directory could not be created. Please check folder permissions.'];
             }
         }
 

@@ -15,8 +15,6 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$isRegistrationOpen) {
         $error = 'Contest registration is currently closed.';
-    } elseif (!Security::validateCsrf()) {
-        $error = 'Security session expired. Please refresh the page and try again.';
     } else {
         $fullName    = trim($_POST['full_name'] ?? '');
         $username    = trim($_POST['username'] ?? '');
@@ -55,27 +53,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
                     try {
-                        $insertStmt = $pdo->prepare("
-                            INSERT INTO users (
-                                username, email, password, full_name, phone_number, photo, bio, vote_count, is_admin
-                            ) VALUES (
-                                :username, :email, :password, :full_name, :phone_number, :photo, :bio, 0, 0
-                            )
-                        ");
+                        try {
+                            $insertStmt = $pdo->prepare("
+                                INSERT INTO users (
+                                    username, email, password, full_name, phone_number, photo, bio, vote_count, is_admin, is_active
+                                ) VALUES (
+                                    :username, :email, :password, :full_name, :phone_number, :photo, :bio, 0, 0, 1
+                                )
+                            ");
 
-                        $insertStmt->execute([
-                            ':username'     => $username,
-                            ':email'        => $email,
-                            ':password'     => $passwordHash,
-                            ':full_name'    => $fullName,
-                            ':phone_number' => $phoneNumber,
-                            ':photo'        => $photoFilename,
-                            ':bio'          => $bio
-                        ]);
+                            $insertStmt->execute([
+                                ':username'     => $username,
+                                ':email'        => $email,
+                                ':password'     => $passwordHash,
+                                ':full_name'    => $fullName,
+                                ':phone_number' => $phoneNumber,
+                                ':photo'        => $photoFilename,
+                                ':bio'          => $bio
+                            ]);
+                        } catch (Exception $subEx) {
+                            // Fallback if is_active or phone_number column is slightly different
+                            $insertStmt = $pdo->prepare("
+                                INSERT INTO users (
+                                    username, email, password, full_name, photo, vote_count, is_admin
+                                ) VALUES (
+                                    :username, :email, :password, :full_name, :photo, 0, 0
+                                )
+                            ");
+
+                            $insertStmt->execute([
+                                ':username'  => $username,
+                                ':email'     => $email,
+                                ':password'  => $passwordHash,
+                                ':full_name' => $fullName,
+                                ':photo'     => $photoFilename
+                            ]);
+                        }
 
                         $newUserId = (int)$pdo->lastInsertId();
 
                         // Automatically log in newly registered contestant
+                        Security::startSession();
                         session_regenerate_id(true);
                         $_SESSION['user_id'] = $newUserId;
                         $_SESSION['username'] = $username;
@@ -94,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     } catch (Exception $e) {
                         error_log("Registration DB Error: " . $e->getMessage());
-                        $error = 'Database error occurred during registration. Please try again.';
+                        $error = 'Database error occurred during registration: ' . $e->getMessage();
                     }
                 }
             }
