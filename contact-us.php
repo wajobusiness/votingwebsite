@@ -62,8 +62,9 @@ $isRegistrationOpen = Settings::isRegistrationOpen();
         <a class="navbar-brand fw-bold text-white d-flex align-items-center gap-2 fs-4" href="index.php">
             <i class="fas fa-crown text-warning"></i> <?= e($siteTitle) ?>
         </a>
-        <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-center gap-2">
             <a href="index.php" class="btn btn-outline-light btn-sm"><i class="fas fa-arrow-left me-1"></i> Home</a>
+            <a href="bookstore.php" class="btn btn-outline-warning btn-sm"><i class="fas fa-book-open me-1"></i> Bookstore</a>
             <?php if ($isRegistrationOpen): ?>
                 <a href="register.php" class="btn btn-warning btn-sm fw-bold">Register</a>
             <?php endif; ?>

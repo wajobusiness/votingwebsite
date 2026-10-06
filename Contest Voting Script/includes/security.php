@@ -156,7 +156,7 @@ class Security {
         }
 
         // Validate real MIME Type using finfo or mime_content_type
-        $allowedMimes = [
+        $imageMimes = [
             'image/jpeg',
             'image/pjpeg',
             'image/png',
@@ -164,24 +164,37 @@ class Security {
             'image/webp',
             'image/gif'
         ];
+        $pdfMimes = [
+            'application/pdf',
+            'application/x-pdf',
+            'application/acrobat',
+            'applications/vnd.pdf',
+            'text/pdf',
+            'text/x-pdf'
+        ];
+
+        $allowedMimes = $imageMimes;
+        if (in_array('pdf', $allowedExts, true)) {
+            $allowedMimes = array_merge($allowedMimes, $pdfMimes);
+        }
 
         if (class_exists('finfo')) {
             $finfo = new finfo(FILEINFO_MIME_TYPE);
             $mime = $finfo->file($file['tmp_name']);
             if ($mime && !in_array(strtolower($mime), $allowedMimes, true)) {
-                return ['success' => false, 'error' => 'File contents do not match a valid image type (' . htmlspecialchars($mime) . ').'];
+                return ['success' => false, 'error' => 'File contents do not match an authorized type (' . htmlspecialchars($mime) . ').'];
             }
         } elseif (function_exists('mime_content_type')) {
             $mime = mime_content_type($file['tmp_name']);
             if ($mime && !in_array(strtolower($mime), $allowedMimes, true)) {
-                return ['success' => false, 'error' => 'File contents do not match a valid image type.'];
+                return ['success' => false, 'error' => 'File contents do not match an authorized type.'];
             }
         }
 
-        // Validate image dimensions using getimagesize (if GD/image library is available)
-        if (function_exists('getimagesize')) {
+        // Validate image dimensions using getimagesize (only for image extensions)
+        if (!in_array($ext, ['pdf', 'webp', 'svg'], true) && function_exists('getimagesize')) {
             $imageInfo = @getimagesize($file['tmp_name']);
-            if ($imageInfo === false && !in_array($ext, ['webp', 'svg'])) {
+            if ($imageInfo === false) {
                 return ['success' => false, 'error' => 'Uploaded file is not a valid or readable image.'];
             }
         }

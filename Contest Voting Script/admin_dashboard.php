@@ -142,6 +142,174 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
 
+            case 'add_book':
+                $title = trim($_POST['title'] ?? '');
+                $author = trim($_POST['author'] ?? 'Crown Night Star');
+                $category = trim($_POST['category'] ?? 'General');
+                $price = (float)($_POST['price'] ?? 0);
+                $shortDesc = trim($_POST['short_description'] ?? '');
+                $description = trim($_POST['description'] ?? '');
+                $previewText = trim($_POST['preview_text'] ?? '');
+                $pagesCount = (int)($_POST['pages_count'] ?? 100);
+                $deliveryType = $_POST['delivery_type'] ?? 'whatsapp';
+                $downloadLink = trim($_POST['download_link'] ?? '');
+                $whatsappNumber = trim($_POST['whatsapp_number'] ?? '');
+
+                if (empty($title) || empty($description)) {
+                    $_SESSION['flash_error'] = "Book title and description are required.";
+                    break;
+                }
+
+                $coverImage = 'assets2/images/book1.jpg';
+                if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
+                    $upload = Security::handleFileUpload($_FILES['cover_image'], __DIR__ . '/uploads/books/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($upload['success']) {
+                        $coverImage = 'uploads/books/' . $upload['filename'];
+                    } else {
+                        $_SESSION['flash_error'] = "Cover image upload failed: " . $upload['error'];
+                        break;
+                    }
+                }
+
+                $pdfFile = null;
+                if ($deliveryType === 'pdf' && isset($_FILES['pdf_file']) && $_FILES['pdf_file']['error'] === UPLOAD_ERR_OK) {
+                    $pdfUpload = Security::handleFileUpload($_FILES['pdf_file'], __DIR__ . '/uploads/books/', ['pdf'], 50);
+                    if ($pdfUpload['success']) {
+                        $pdfFile = $pdfUpload['filename'];
+                    }
+                }
+
+                $stmt = $pdo->prepare("
+                    INSERT INTO books (
+                        title, author, category, cover_image, description, short_description,
+                        price, delivery_type, pdf_file, download_link, whatsapp_number, preview_text, pages_count, is_active
+                    ) VALUES (
+                        :title, :author, :category, :cover_image, :description, :short_description,
+                        :price, :delivery_type, :pdf_file, :download_link, :whatsapp_number, :preview_text, :pages_count, 1
+                    )
+                ");
+
+                $stmt->execute([
+                    ':title'             => $title,
+                    ':author'            => $author,
+                    ':category'          => $category,
+                    ':cover_image'       => $coverImage,
+                    ':description'       => $description,
+                    ':short_description' => $shortDesc,
+                    ':price'             => $price,
+                    ':delivery_type'     => $deliveryType,
+                    ':pdf_file'          => $pdfFile,
+                    ':download_link'     => !empty($downloadLink) ? $downloadLink : null,
+                    ':whatsapp_number'   => !empty($whatsappNumber) ? $whatsappNumber : null,
+                    ':preview_text'      => $previewText,
+                    ':pages_count'       => $pagesCount
+                ]);
+
+                $_SESSION['flash_success'] = "Digital book publication added successfully!";
+                break;
+
+            case 'update_book':
+                $bookId = filter_input(INPUT_POST, 'book_id', FILTER_VALIDATE_INT);
+                if (!$bookId) {
+                    $_SESSION['flash_error'] = "Invalid book ID.";
+                    break;
+                }
+
+                $title = trim($_POST['title'] ?? '');
+                $author = trim($_POST['author'] ?? 'Crown Night Star');
+                $category = trim($_POST['category'] ?? 'General');
+                $price = (float)($_POST['price'] ?? 0);
+                $shortDesc = trim($_POST['short_description'] ?? '');
+                $description = trim($_POST['description'] ?? '');
+                $previewText = trim($_POST['preview_text'] ?? '');
+                $pagesCount = (int)($_POST['pages_count'] ?? 100);
+                $deliveryType = $_POST['delivery_type'] ?? 'whatsapp';
+                $downloadLink = trim($_POST['download_link'] ?? '');
+                $whatsappNumber = trim($_POST['whatsapp_number'] ?? '');
+                $isActive = isset($_POST['is_active']) ? 1 : 0;
+
+                $stmt = $pdo->prepare("SELECT * FROM books WHERE id = ?");
+                $stmt->execute([$bookId]);
+                $existingBook = $stmt->fetch();
+                if (!$existingBook) {
+                    $_SESSION['flash_error'] = "Book not found.";
+                    break;
+                }
+
+                $coverImage = $existingBook['cover_image'];
+                if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
+                    $upload = Security::handleFileUpload($_FILES['cover_image'], __DIR__ . '/uploads/books/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($upload['success']) {
+                        $coverImage = 'uploads/books/' . $upload['filename'];
+                    }
+                }
+
+                $pdfFile = $existingBook['pdf_file'];
+                if ($deliveryType === 'pdf' && isset($_FILES['pdf_file']) && $_FILES['pdf_file']['error'] === UPLOAD_ERR_OK) {
+                    $pdfUpload = Security::handleFileUpload($_FILES['pdf_file'], __DIR__ . '/uploads/books/', ['pdf'], 50);
+                    if ($pdfUpload['success']) {
+                        $pdfFile = $pdfUpload['filename'];
+                    }
+                }
+
+                $stmt = $pdo->prepare("
+                    UPDATE books SET
+                        title = :title,
+                        author = :author,
+                        category = :category,
+                        cover_image = :cover_image,
+                        description = :description,
+                        short_description = :short_description,
+                        price = :price,
+                        delivery_type = :delivery_type,
+                        pdf_file = :pdf_file,
+                        download_link = :download_link,
+                        whatsapp_number = :whatsapp_number,
+                        preview_text = :preview_text,
+                        pages_count = :pages_count,
+                        is_active = :is_active
+                    WHERE id = :id
+                ");
+
+                $stmt->execute([
+                    ':title'             => $title,
+                    ':author'            => $author,
+                    ':category'          => $category,
+                    ':cover_image'       => $coverImage,
+                    ':description'       => $description,
+                    ':short_description' => $shortDesc,
+                    ':price'             => $price,
+                    ':delivery_type'     => $deliveryType,
+                    ':pdf_file'          => $pdfFile,
+                    ':download_link'     => !empty($downloadLink) ? $downloadLink : null,
+                    ':whatsapp_number'   => !empty($whatsappNumber) ? $whatsappNumber : null,
+                    ':preview_text'      => $previewText,
+                    ':pages_count'       => $pagesCount,
+                    ':is_active'         => $isActive,
+                    ':id'                => $bookId
+                ]);
+
+                $_SESSION['flash_success'] = "Book details updated successfully!";
+                break;
+
+            case 'delete_book':
+                $bookId = filter_input(INPUT_POST, 'book_id', FILTER_VALIDATE_INT);
+                if ($bookId) {
+                    $stmt = $pdo->prepare("DELETE FROM books WHERE id = ?");
+                    $stmt->execute([$bookId]);
+                    $_SESSION['flash_success'] = "Book removed from catalog.";
+                }
+                break;
+
+            case 'toggle_book_status':
+                $bookId = filter_input(INPUT_POST, 'book_id', FILTER_VALIDATE_INT);
+                if ($bookId) {
+                    $stmt = $pdo->prepare("UPDATE books SET is_active = NOT is_active WHERE id = ?");
+                    $stmt->execute([$bookId]);
+                    $_SESSION['flash_success'] = "Book visibility status updated.";
+                }
+                break;
+
             default:
                 $_SESSION['flash_error'] = "Unrecognized administrative action.";
                 break;
@@ -222,6 +390,15 @@ try {
     $competitions = $pdo->query("SELECT * FROM competitions ORDER BY created_at DESC")->fetchAll();
 } catch (Exception $e) {
     $competitions = [];
+}
+
+// 5. Digital Books Catalog (Fail-Safe)
+$books = [];
+try {
+    $books = BookstoreService::getAllBooks();
+} catch (Exception $e) {
+    error_log("Books query error: " . $e->getMessage());
+    $books = [];
 }
 
 $currentStage = Settings::getCurrentStage();
@@ -410,6 +587,11 @@ $currency = Settings::getCurrencySymbol();
         <li class="nav-item">
             <button class="nav-link" id="media-tab" data-bs-toggle="tab" data-bs-target="#mediaTab">
                 <i class="fas fa-images me-1"></i> Banners & Showcase
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="bookstore-tab" data-bs-toggle="tab" data-bs-target="#bookstoreTab">
+                <i class="fas fa-book-open me-1"></i> Digital Bookstore (<?= count($books) ?>)
             </button>
         </li>
     </ul>
@@ -760,14 +942,371 @@ $currency = Settings::getCurrencySymbol();
             </div>
         </div>
 
+        <!-- ==================== TAB 5: DIGITAL BOOKSTORE ==================== -->
+        <div class="tab-pane fade" id="bookstoreTab">
+            <div class="row g-4">
+                <!-- Header & Quick Actions -->
+                <div class="col-12">
+                    <div class="content-panel d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <div>
+                            <h4 class="fw-bold text-white mb-1"><i class="fas fa-book-open text-warning me-2"></i> Digital Bookstore Catalog</h4>
+                            <p class="text-secondary small mb-0">Manage digital publications, masterclasses, guides, pricing, and automated fulfillment.</p>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="bookstore.php" target="_blank" class="btn btn-outline-info btn-sm">
+                                <i class="fas fa-external-link-alt me-1"></i> Preview Storefront
+                            </a>
+                            <button type="button" class="btn btn-gold btn-sm" data-bs-toggle="modal" data-bs-target="#addBookModal">
+                                <i class="fas fa-plus-circle me-1"></i> Add New Book
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Books Table -->
+                <div class="col-12">
+                    <div class="content-panel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold text-white mb-0">Publications (<?= count($books) ?>)</h5>
+                            <span class="badge bg-warning text-dark"><?= count(array_filter($books, function($b) { return !empty($b['is_active']); })) ?> Active for Sale</span>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-custom">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 70px;">Cover</th>
+                                        <th>Title & Details</th>
+                                        <th>Category</th>
+                                        <th>Price</th>
+                                        <th>Delivery Type</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($books)): ?>
+                                        <tr>
+                                            <td colspan="7" class="text-center py-4 text-secondary">
+                                                <i class="fas fa-book-open fa-2x mb-2 d-block opacity-50"></i>
+                                                No publications in catalog yet. Click "Add New Book" to create one.
+                                            </td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($books as $b): ?>
+                                            <tr>
+                                                <td>
+                                                    <img src="<?= e($b['cover_image']) ?>" alt="Book Cover" class="rounded border border-secondary shadow-sm object-fit-cover" style="width: 50px; height: 70px;">
+                                                </td>
+                                                <td>
+                                                    <div class="fw-bold text-white fs-6"><?= e($b['title']) ?></div>
+                                                    <div class="small text-secondary">
+                                                        <i class="fas fa-user-edit me-1"></i> <?= e($b['author'] ?? 'Crown Night Star') ?> &bull; 
+                                                        <i class="fas fa-file-alt ms-1 me-1"></i> <?= (int)$b['pages_count'] ?> pages
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-dark border border-secondary text-info"><?= e($b['category']) ?></span>
+                                                </td>
+                                                <td>
+                                                    <span class="fw-bold text-warning fs-6"><?= $currency . number_format((float)$b['price'], 2) ?></span>
+                                                </td>
+                                                <td>
+                                                    <?php if ($b['delivery_type'] === 'whatsapp'): ?>
+                                                        <span class="badge bg-success"><i class="fab fa-whatsapp me-1"></i> WhatsApp Order</span>
+                                                    <?php elseif ($b['delivery_type'] === 'pdf'): ?>
+                                                        <span class="badge bg-danger"><i class="fas fa-file-pdf me-1"></i> Direct PDF</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-primary"><i class="fas fa-link me-1"></i> External Link</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <form method="POST" class="d-inline">
+                                                        <?= Security::csrfField() ?>
+                                                        <input type="hidden" name="admin_action" value="toggle_book_status">
+                                                        <input type="hidden" name="book_id" value="<?= (int)$b['id'] ?>">
+                                                        <button type="submit" class="btn btn-sm <?= !empty($b['is_active']) ? 'btn-success' : 'btn-outline-secondary' ?> py-0 px-2" style="font-size: 11px;">
+                                                            <?= !empty($b['is_active']) ? '<i class="fas fa-check-circle me-1"></i> Active' : '<i class="fas fa-eye-slash me-1"></i> Draft' ?>
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                                <td class="text-end">
+                                                    <div class="d-flex justify-content-end gap-1">
+                                                        <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editBookModal_<?= (int)$b['id'] ?>" title="Edit Book">
+                                                            <i class="fas fa-edit"></i>
+                                                        </button>
+                                                        <form method="POST" class="d-inline" onsubmit="return confirm('Permanently delete \'<?= addslashes(e($b['title'])) ?>\'?');">
+                                                            <?= Security::csrfField() ?>
+                                                            <input type="hidden" name="admin_action" value="delete_book">
+                                                            <input type="hidden" name="book_id" value="<?= (int)$b['id'] ?>">
+                                                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete Book">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
+
+<!-- ==================== ADD BOOK MODAL ==================== -->
+<div class="modal fade" id="addBookModal" tabindex="-1" aria-labelledby="addBookModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content bg-dark text-white border border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold text-warning" id="addBookModalLabel"><i class="fas fa-plus-circle me-2"></i> Add Digital Publication</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" enctype="multipart/form-data">
+                <?= Security::csrfField() ?>
+                <input type="hidden" name="admin_action" value="add_book">
+
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold text-light">Book Title <span class="text-danger">*</span></label>
+                            <input type="text" name="title" class="form-control bg-dark border-secondary text-white" placeholder="e.g. The Crown Within" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Author</label>
+                            <input type="text" name="author" class="form-control bg-dark border-secondary text-white" value="Crown Night Star" placeholder="Author name">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Category</label>
+                            <select name="category" class="form-select bg-dark border-secondary text-white">
+                                <option value="Pageantry & Leadership">Pageantry & Leadership</option>
+                                <option value="Personal Branding">Personal Branding</option>
+                                <option value="Digital Marketing">Digital Marketing</option>
+                                <option value="Modeling & Fashion">Modeling & Fashion</option>
+                                <option value="Self Development">Self Development</option>
+                                <option value="General">General</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Price (<?= $currency ?>) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-dark border-secondary text-warning"><?= $currency ?></span>
+                                <input type="number" step="100" min="0" name="price" class="form-control bg-dark border-secondary text-white" placeholder="3500" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Estimated Pages</label>
+                            <input type="number" name="pages_count" class="form-control bg-dark border-secondary text-white" value="120" min="1">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Cover Image</label>
+                            <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                            <div class="form-text text-secondary" style="font-size: 11px;">Recommended: 600x850px (JPG, PNG, WEBP). If omitted, default cover is used.</div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Short Catchy Summary (1-2 sentences)</label>
+                            <input type="text" name="short_description" class="form-control bg-dark border-secondary text-white" placeholder="Brief tagline shown on book cards">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Full Synopsis / Description <span class="text-danger">*</span></label>
+                            <textarea name="description" rows="4" class="form-control bg-dark border-secondary text-white" placeholder="Detailed book breakdown, what readers will learn, chapter breakdown..." required></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Sample Excerpt / Preview Text (Optional)</label>
+                            <textarea name="preview_text" rows="3" class="form-control bg-dark border-secondary text-white" placeholder="First chapter sneak peek or introductory excerpt..."></textarea>
+                        </div>
+
+                        <!-- Fulfillment Options -->
+                        <div class="col-12 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-truck-loading me-1"></i> Delivery & Fulfillment Mode</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Fulfillment Channel</label>
+                            <select name="delivery_type" class="form-select bg-dark border-secondary text-white" id="add_delivery_type" onchange="updateDeliveryFields('add')">
+                                <option value="whatsapp">WhatsApp Order (Direct Chat)</option>
+                                <option value="pdf">Direct PDF Download</option>
+                                <option value="link">External Access Link</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-8" id="add_whatsapp_box">
+                            <label class="form-label small fw-semibold text-light">WhatsApp Order Number</label>
+                            <input type="text" name="whatsapp_number" class="form-control bg-dark border-secondary text-white" value="<?= e(Settings::get('support_phone', '09067619370')) ?>" placeholder="e.g. 09067619370">
+                            <div class="form-text text-secondary" style="font-size: 11px;">Buyers will be redirected to WhatsApp with prefilled title and price.</div>
+                        </div>
+
+                        <div class="col-md-8 d-none" id="add_pdf_box">
+                            <label class="form-label small fw-semibold text-light">Upload Digital PDF File</label>
+                            <input type="file" name="pdf_file" accept="application/pdf" class="form-control bg-dark border-secondary text-white">
+                            <div class="form-text text-secondary" style="font-size: 11px;">Securely delivered via authenticated download link.</div>
+                        </div>
+
+                        <div class="col-md-8 d-none" id="add_link_box">
+                            <label class="form-label small fw-semibold text-light">External Download / Access URL</label>
+                            <input type="url" name="download_link" class="form-control bg-dark border-secondary text-white" placeholder="https://drive.google.com/... or Gumroad/Selar URL">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-cloud-upload-alt me-1"></i> Publish Digital Book</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== EDIT BOOK MODALS ==================== -->
+<?php foreach ($books as $b): ?>
+<div class="modal fade" id="editBookModal_<?= (int)$b['id'] ?>" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content bg-dark text-white border border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold text-warning"><i class="fas fa-edit me-2"></i> Edit Publication: <?= e($b['title']) ?></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" enctype="multipart/form-data">
+                <?= Security::csrfField() ?>
+                <input type="hidden" name="admin_action" value="update_book">
+                <input type="hidden" name="book_id" value="<?= (int)$b['id'] ?>">
+
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold text-light">Book Title <span class="text-danger">*</span></label>
+                            <input type="text" name="title" class="form-control bg-dark border-secondary text-white" value="<?= e($b['title']) ?>" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Author</label>
+                            <input type="text" name="author" class="form-control bg-dark border-secondary text-white" value="<?= e($b['author']) ?>">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Category</label>
+                            <select name="category" class="form-select bg-dark border-secondary text-white">
+                                <?php 
+                                $cats = ['Pageantry & Leadership', 'Personal Branding', 'Digital Marketing', 'Modeling & Fashion', 'Self Development', 'General'];
+                                foreach ($cats as $cat): ?>
+                                    <option value="<?= e($cat) ?>" <?= $b['category'] === $cat ? 'selected' : '' ?>><?= e($cat) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Price (<?= $currency ?>) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-dark border-secondary text-warning"><?= $currency ?></span>
+                                <input type="number" step="100" min="0" name="price" class="form-control bg-dark border-secondary text-white" value="<?= (float)$b['price'] ?>" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Estimated Pages</label>
+                            <input type="number" name="pages_count" class="form-control bg-dark border-secondary text-white" value="<?= (int)$b['pages_count'] ?>" min="1">
+                        </div>
+
+                        <div class="col-12">
+                            <div class="d-flex align-items-center gap-3">
+                                <img src="<?= e($b['cover_image']) ?>" width="45" height="60" class="rounded border border-secondary object-fit-cover">
+                                <div class="flex-grow-1">
+                                    <label class="form-label small fw-semibold text-light">Replace Cover Image (Optional)</label>
+                                    <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Short Catchy Summary</label>
+                            <input type="text" name="short_description" class="form-control bg-dark border-secondary text-white" value="<?= e($b['short_description'] ?? '') ?>">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Full Synopsis / Description <span class="text-danger">*</span></label>
+                            <textarea name="description" rows="4" class="form-control bg-dark border-secondary text-white" required><?= e($b['description']) ?></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Sample Excerpt / Preview Text</label>
+                            <textarea name="preview_text" rows="3" class="form-control bg-dark border-secondary text-white"><?= e($b['preview_text'] ?? '') ?></textarea>
+                        </div>
+
+                        <!-- Fulfillment Options -->
+                        <div class="col-12 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-truck-loading me-1"></i> Delivery & Fulfillment Mode</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Fulfillment Channel</label>
+                            <select name="delivery_type" class="form-select bg-dark border-secondary text-white" id="edit_delivery_type_<?= $b['id'] ?>" onchange="updateDeliveryFields('edit_<?= $b['id'] ?>')">
+                                <option value="whatsapp" <?= $b['delivery_type'] === 'whatsapp' ? 'selected' : '' ?>>WhatsApp Order</option>
+                                <option value="pdf" <?= $b['delivery_type'] === 'pdf' ? 'selected' : '' ?>>Direct PDF Download</option>
+                                <option value="link" <?= $b['delivery_type'] === 'link' ? 'selected' : '' ?>>External Access Link</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-8 <?= $b['delivery_type'] !== 'whatsapp' ? 'd-none' : '' ?>" id="edit_<?= $b['id'] ?>_whatsapp_box">
+                            <label class="form-label small fw-semibold text-light">WhatsApp Order Number</label>
+                            <input type="text" name="whatsapp_number" class="form-control bg-dark border-secondary text-white" value="<?= e($b['whatsapp_number'] ?? Settings::get('support_phone', '09067619370')) ?>">
+                        </div>
+
+                        <div class="col-md-8 <?= $b['delivery_type'] !== 'pdf' ? 'd-none' : '' ?>" id="edit_<?= $b['id'] ?>_pdf_box">
+                            <label class="form-label small fw-semibold text-light">Replace PDF File (<?= !empty($b['pdf_file']) ? 'Current: ' . e($b['pdf_file']) : 'No PDF attached' ?>)</label>
+                            <input type="file" name="pdf_file" accept="application/pdf" class="form-control bg-dark border-secondary text-white">
+                        </div>
+
+                        <div class="col-md-8 <?= $b['delivery_type'] !== 'link' ? 'd-none' : '' ?>" id="edit_<?= $b['id'] ?>_link_box">
+                            <label class="form-label small fw-semibold text-light">External Download / Access URL</label>
+                            <input type="url" name="download_link" class="form-control bg-dark border-secondary text-white" value="<?= e($b['download_link'] ?? '') ?>">
+                        </div>
+
+                        <div class="col-12 mt-2">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_active" id="active_<?= $b['id'] ?>" <?= !empty($b['is_active']) ? 'checked' : '' ?>>
+                                <label class="form-check-label text-light fw-semibold" for="active_<?= $b['id'] ?>">Active & Available in Bookstore</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-save me-1"></i> Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 
 <script src="assets2/js/bootstrap.bundle.min.js"></script>
 <script>
 function toggleSelectAll(master) {
     const checkboxes = document.querySelectorAll('.user-chk');
     checkboxes.forEach(chk => chk.checked = master.checked);
+}
+
+function updateDeliveryFields(prefix) {
+    const select = document.getElementById(prefix === 'add' ? 'add_delivery_type' : prefix + '_delivery_type' || (prefix.startsWith('edit_') ? 'edit_delivery_type_' + prefix.replace('edit_', '') : ''));
+    if (!select) return;
+    const type = select.value;
+    
+    const waBox = document.getElementById(prefix + '_whatsapp_box');
+    const pdfBox = document.getElementById(prefix + '_pdf_box');
+    const linkBox = document.getElementById(prefix + '_link_box');
+
+    if (waBox) waBox.classList.toggle('d-none', type !== 'whatsapp');
+    if (pdfBox) pdfBox.classList.toggle('d-none', type !== 'pdf');
+    if (linkBox) linkBox.classList.toggle('d-none', type !== 'link');
 }
 </script>
 

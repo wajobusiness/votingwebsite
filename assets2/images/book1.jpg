@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" width="400" height="600">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#140f28"/>
+      <stop offset="50%" stop-color="#241947"/>
+      <stop offset="100%" stop-color="#0a0717"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="50%" stop-color="#D4AF37"/>
+      <stop offset="100%" stop-color="#AA8010"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="400" height="600" rx="12" fill="url(#bg)"/>
+  <rect x="15" y="15" width="370" height="570" rx="8" fill="none" stroke="url(#gold)" stroke-width="2" opacity="0.6"/>
+  <rect x="25" y="25" width="350" height="550" rx="6" fill="none" stroke="url(#gold)" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Crown Icon -->
+  <g transform="translate(160, 80) scale(0.16)">
+    <path fill="url(#gold)" d="M480 64c0-26.5-21.5-48-48-48-18.7 0-35.1 10.7-43.2 26.5L320 188.7 221.2 42.5C213.1 26.7 196.7 16 178 16c-26.5 0-48 21.5-48 48 0 10.9 3.6 21 9.8 29.2L20 340.5C8.3 355.6 0 374.9 0 396v36c0 44.2 35.8 80 80 80h352c44.2 0 80-35.8 80-80v-36c0-21.1-8.3-40.4-20-55.5L378.2 93.2c6.2-8.2 9.8-18.3 9.8-29.2z"/>
+  </g>
+
+  <!-- Badge -->
+  <rect x="120" y="200" width="160" height="26" rx="13" fill="url(#gold)" opacity="0.2"/>
+  <text x="200" y="217" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="11" font-weight="700" fill="#FFE066" text-anchor="middle" letter-spacing="2">OFFICIAL GUIDE</text>
+
+  <!-- Title -->
+  <text x="200" y="280" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="30" font-weight="900" fill="url(#gold)" text-anchor="middle">THE CROWN</text>
+  <text x="200" y="325" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="30" font-weight="900" fill="#FFFFFF" text-anchor="middle">WITHIN</text>
+  
+  <!-- Subtitle -->
+  <text x="200" y="375" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="13" font-weight="600" fill="#CBD5E1" text-anchor="middle">Winning Pageantry &amp; Public Contests</text>
+  <line x1="140" y1="405" x2="260" y2="405" stroke="url(#gold)" stroke-width="2"/>
+
+  <!-- Features -->
+  <text x="200" y="440" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="11" fill="#94A3B8" text-anchor="middle">Stage Presence • Interview Mastery • Voting Strategy</text>
+
+  <!-- Author -->
+  <text x="200" y="520" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="12" font-weight="700" fill="url(#gold)" text-anchor="middle" letter-spacing="1">CROWN NIGHT STAR EDITORIAL</text>
+</svg>

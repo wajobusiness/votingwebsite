@@ -40,6 +40,9 @@ try {
 } catch (Exception $e) {
     error_log("Contestants query error on index: " . $e->getMessage());
 }
+
+// 5. Fetch Featured Bookstore Publications
+$featuredBooks = BookstoreService::getActiveBooks();
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
@@ -243,6 +246,7 @@ try {
             <ul class="navbar-nav mx-auto mb-2 mb-lg-0 gap-3">
                 <li class="nav-item"><a class="nav-link text-white fw-semibold" href="index.php">Home</a></li>
                 <li class="nav-item"><a class="nav-link text-light" href="#contestants">Contestants</a></li>
+                <li class="nav-item"><a class="nav-link text-warning fw-semibold" href="bookstore.php"><i class="fas fa-book-open me-1"></i> Bookstore</a></li>
                 <li class="nav-item"><a class="nav-link text-light" href="about-us.php">About Contest</a></li>
                 <li class="nav-item"><a class="nav-link text-light" href="terms.php">Terms & Rules</a></li>
                 <li class="nav-item"><a class="nav-link text-light" href="contact-us.php">Contact Us</a></li>
@@ -392,6 +396,97 @@ try {
     </div>
 </section>
 
+<!-- Bookstore Showcase Slider Section -->
+<?php if (!empty($featuredBooks)): ?>
+<section class="py-5" style="background: rgba(18, 14, 38, 0.75); border-top: 1px solid rgba(255, 215, 0, 0.15); border-bottom: 1px solid rgba(255, 215, 0, 0.15);">
+    <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-3">
+            <div>
+                <span class="badge bg-warning text-dark px-3 py-2 fw-bold text-uppercase mb-2"><i class="fas fa-book-open me-1"></i> Digital Publications</span>
+                <h2 class="fw-bold text-white mb-1">Official Contestant Bookstore & Guides</h2>
+                <p class="text-secondary small mb-0">Masterclasses and digital playbooks to supercharge your performance, charisma, and brand</p>
+            </div>
+            <div>
+                <a href="bookstore.php" class="btn btn-outline-warning btn-sm px-3 fw-bold">
+                    View All Books <i class="fas fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- Carousel Slider -->
+        <div id="booksCarousel" class="carousel slide" data-bs-ride="carousel" data-bs-interval="4500">
+            <div class="carousel-inner">
+                <?php
+                    $chunks = array_chunk($featuredBooks, 3);
+                    foreach ($chunks as $chunkIndex => $chunk):
+                ?>
+                    <div class="carousel-item <?= $chunkIndex === 0 ? 'active' : '' ?>">
+                        <div class="row g-4">
+                            <?php foreach ($chunk as $b): ?>
+                                <?php
+                                    $priceStr = $currencySymbol . number_format((float)$b['price'], 2);
+                                    $whatsAppUrl = BookstoreService::getWhatsAppUrl($b);
+                                    $coverPath = $b['cover_image'];
+                                    if (!file_exists(__DIR__ . '/' . $coverPath) && file_exists(__DIR__ . '/assets2/images/book1.jpg')) {
+                                        $coverPath = 'assets2/images/book1.jpg';
+                                    }
+                                ?>
+                                <div class="col-md-4">
+                                    <div class="card bg-dark border-secondary border-opacity-50 rounded-4 overflow-hidden h-100 shadow-lg">
+                                        <div class="p-3 text-center" style="background: #0f0c20;">
+                                            <img src="<?= e($coverPath) ?>" alt="<?= e($b['title']) ?>" class="img-fluid rounded-3 shadow" style="max-height: 220px;">
+                                        </div>
+                                        <div class="p-3 d-flex flex-column flex-grow-1 justify-content-between">
+                                            <div>
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="badge bg-warning text-dark" style="font-size: 10px;"><?= e($b['category'] ?? 'Guidebook') ?></span>
+                                                    <span class="fw-bold text-warning small"><?= $priceStr ?></span>
+                                                </div>
+                                                <h6 class="fw-bold text-white mb-1 text-truncate" title="<?= e($b['title']) ?>"><?= e($b['title']) ?></h6>
+                                                <p class="text-secondary small mb-2">By <?= e($b['author']) ?></p>
+                                                <p class="text-secondary small mb-3" style="font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                                    <?= e($b['short_description'] ?? substr($b['description'], 0, 80) . '...') ?>
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <?php if ($b['delivery_type'] === 'whatsapp'): ?>
+                                                    <a href="<?= e($whatsAppUrl) ?>" target="_blank" class="btn btn-success btn-sm w-100 fw-bold">
+                                                        <i class="fab fa-whatsapp me-1"></i> Order Book (<?= $priceStr ?>)
+                                                    </a>
+                                                <?php elseif ($b['delivery_type'] === 'pdf' && !empty($b['pdf_file'])): ?>
+                                                    <a href="download_book.php?id=<?= $b['id'] ?>" class="btn btn-warning btn-sm w-100 fw-bold">
+                                                        <i class="fas fa-download me-1"></i> Download PDF
+                                                    </a>
+                                                <?php else: ?>
+                                                    <a href="bookstore.php" class="btn btn-warning btn-sm w-100 fw-bold">
+                                                        <i class="fas fa-eye me-1"></i> View in Bookstore
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if (count($chunks) > 1): ?>
+                <div class="d-flex justify-content-center gap-2 mt-4">
+                    <button class="btn btn-outline-warning btn-sm rounded-circle px-3 py-2" type="button" data-bs-target="#booksCarousel" data-bs-slide="prev">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm rounded-circle px-3 py-2" type="button" data-bs-target="#booksCarousel" data-bs-slide="next">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
+
 <!-- Footer -->
 <footer>
     <div class="container">
@@ -407,6 +502,7 @@ try {
                 <ul class="list-unstyled small">
                     <li class="mb-2"><a href="index.php" class="text-secondary text-decoration-none">Home</a></li>
                     <li class="mb-2"><a href="#contestants" class="text-secondary text-decoration-none">Contestants</a></li>
+                    <li class="mb-2"><a href="bookstore.php" class="text-warning text-decoration-none"><i class="fas fa-book-open me-1"></i> Bookstore</a></li>
                     <li class="mb-2"><a href="about-us.php" class="text-secondary text-decoration-none">About Us</a></li>
                     <li class="mb-2"><a href="terms.php" class="text-secondary text-decoration-none">Terms & Rules</a></li>
                 </ul>
