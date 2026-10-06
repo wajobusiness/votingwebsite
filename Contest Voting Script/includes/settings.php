@@ -33,7 +33,7 @@ class Settings {
     /**
      * Get setting value by name with fallback
      */
-    public static function get(string $name, mixed $default = null): mixed {
+    public static function get(string $name, $default = null) {
         self::loadAll();
 
         if (array_key_exists($name, self::$cache)) {

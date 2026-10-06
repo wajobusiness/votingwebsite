@@ -1,10 +1,10 @@
 <?php
 /**
- * Lightweight .env Loader
+ * Universal .env Loader (PHP 7.4 - 8.4+ Compatible)
  */
 class Env {
-    private static array $variables = [];
-    private static bool $loaded = false;
+    private static $variables = [];
+    private static $loaded = false;
 
     public static function load(string $filePath): void {
         if (!file_exists($filePath)) {
@@ -19,19 +19,19 @@ class Env {
         foreach ($lines as $line) {
             $line = trim($line);
             // Skip comments and empty lines
-            if ($line === '' || str_starts_with($line, '#') || str_starts_with($line, ';')) {
+            if ($line === '' || substr($line, 0, 1) === '#' || substr($line, 0, 1) === ';') {
                 continue;
             }
 
             // Split key=value
             if (strpos($line, '=') !== false) {
-                [$key, $value] = explode('=', $line, 2);
-                $key = trim($key);
-                $value = trim($value);
+                $parts = explode('=', $line, 2);
+                $key = trim($parts[0]);
+                $value = trim($parts[1] ?? '');
 
                 // Strip quotes
-                if ((str_starts_with($value, '"') && str_ends_with($value, '"')) ||
-                    (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
+                if ((substr($value, 0, 1) === '"' && substr($value, -1) === '"') ||
+                    (substr($value, 0, 1) === "'" && substr($value, -1) === "'")) {
                     $value = substr($value, 1, -1);
                 }
 
@@ -58,7 +58,7 @@ class Env {
         self::$loaded = true;
     }
 
-    public static function get(string $key, mixed $default = null): mixed {
+    public static function get(string $key, $default = null) {
         if (!self::$loaded) {
             $envPath = dirname(__DIR__) . '/.env';
             if (file_exists($envPath)) {
