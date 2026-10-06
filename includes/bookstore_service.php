@@ -11,7 +11,7 @@ require_once __DIR__ . '/settings.php';
 class BookstoreService {
 
     /**
-     * Ensure books table exists and is properly indexed
+     * Ensure books and book_purchases tables exist and are properly indexed
      */
     public static function ensureTable(): void {
         $pdo = DB::pdo();
@@ -38,6 +38,31 @@ class BookstoreService {
                     PRIMARY KEY (`id`),
                     KEY `idx_books_active` (`is_active`),
                     KEY `idx_books_category` (`category`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS `book_purchases` (
+                    `id` INT(11) NOT NULL AUTO_INCREMENT,
+                    `book_id` INT(11) NOT NULL,
+                    `user_id` INT(11) DEFAULT NULL,
+                    `buyer_name` VARCHAR(255) NOT NULL,
+                    `buyer_email` VARCHAR(255) NOT NULL,
+                    `buyer_phone` VARCHAR(50) DEFAULT NULL,
+                    `amount` DECIMAL(10,2) NOT NULL,
+                    `currency` VARCHAR(10) NOT NULL DEFAULT 'NGN',
+                    `reference` VARCHAR(100) NOT NULL,
+                    `status` ENUM('pending', 'success', 'failed') NOT NULL DEFAULT 'pending',
+                    `access_token` VARCHAR(64) NOT NULL,
+                    `download_count` INT(11) NOT NULL DEFAULT 0,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uniq_reference` (`reference`),
+                    UNIQUE KEY `uniq_access_token` (`access_token`),
+                    KEY `idx_buyer_email` (`buyer_email`),
+                    KEY `idx_user_id` (`user_id`),
+                    KEY `idx_book_id` (`book_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
@@ -205,13 +230,274 @@ class BookstoreService {
     }
 
     /**
-     * Generate WhatsApp order redirect URL
+     * Verify Paystack transaction reference and record book purchase
+     */
+    public static function verifyAndFulfillPurchase(
+        string $reference,
+        int $bookId,
+        string $buyerEmail,
+        string $buyerName,
+        ?string $buyerPhone = null,
+        ?int $userId = null
+    ): array {
+        self::ensureTable();
+        $reference = trim($reference);
+
+        if (empty($reference)) {
+            return ['success' => false, 'error' => 'Transaction reference is required.'];
+        }
+
+        if ($bookId <= 0) {
+            return ['success' => false, 'error' => 'A valid book ID must be specified.'];
+        }
+
+        $book = self::getBookById($bookId);
+        if (!$book) {
+            return ['success' => false, 'error' => 'Requested book publication could not be found.'];
+        }
+
+        $pdo = DB::pdo();
+
+        // 1. Idempotency Check: Verify if purchase was already recorded
+        $checkStmt = $pdo->prepare("SELECT * FROM book_purchases WHERE reference = ? LIMIT 1");
+        $checkStmt->execute([$reference]);
+        $existing = $checkStmt->fetch();
+
+        if ($existing && $existing['status'] === 'success') {
+            return [
+                'success'       => true,
+                'already_saved' => true,
+                'access_token'  => $existing['access_token'],
+                'purchase'      => $existing,
+                'book'          => $book,
+                'redirect_url'  => 'order_success.php?token=' . urlencode($existing['access_token'])
+            ];
+        }
+
+        // 2. Query Paystack REST API to verify payment
+        $secretKey = Env::get('PAYSTACK_SECRET_KEY');
+        if (empty($secretKey)) {
+            return ['success' => false, 'error' => 'Payment gateway secret key is not configured.'];
+        }
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => "https://api.paystack.co/transaction/verify/" . rawurlencode($reference),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 25,
+            CURLOPT_HTTPHEADER     => [
+                "Authorization: Bearer {$secretKey}",
+                "Cache-Control: no-cache"
+            ]
+        ]);
+
+        $rawResponse = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($rawResponse === false || !empty($curlError)) {
+            error_log("Paystack Verification cURL Error: " . $curlError);
+            return ['success' => false, 'error' => 'Unable to connect to Paystack payment gateway.'];
+        }
+
+        $responseData = json_decode($rawResponse, true);
+        if ($httpCode !== 200 || !isset($responseData['status']) || $responseData['status'] !== true) {
+            $msg = $responseData['message'] ?? 'Transaction verification failed on gateway.';
+            return ['success' => false, 'error' => $msg];
+        }
+
+        $data = $responseData['data'] ?? [];
+        if (($data['status'] ?? '') !== 'success') {
+            return ['success' => false, 'error' => 'Payment was not marked successful by gateway.'];
+        }
+
+        // 3. Verify Amount
+        $paidAmountKobo = (int)($data['amount'] ?? 0);
+        $paidAmount = $paidAmountKobo / 100.0;
+        $currency = $data['currency'] ?? 'NGN';
+        $customer = $data['customer'] ?? [];
+
+        $finalEmail = !empty($buyerEmail) ? $buyerEmail : ($customer['email'] ?? 'customer@crownnightstar.com');
+        $finalName  = !empty($buyerName) ? $buyerName : trim(($customer['first_name'] ?? '') . ' ' . ($customer['last_name'] ?? ''));
+        if (empty($finalName)) {
+            $finalName = 'Valued Customer';
+        }
+        $finalPhone = !empty($buyerPhone) ? $buyerPhone : ($customer['phone'] ?? null);
+
+        // Generate cryptographically unique access token
+        $accessToken = bin2hex(random_bytes(24));
+
+        // 4. Save Purchase Record
+        try {
+            $insertStmt = $pdo->prepare("
+                INSERT INTO book_purchases (
+                    book_id, user_id, buyer_name, buyer_email, buyer_phone,
+                    amount, currency, reference, status, access_token
+                ) VALUES (
+                    :book_id, :user_id, :buyer_name, :buyer_email, :buyer_phone,
+                    :amount, :currency, :reference, 'success', :access_token
+                )
+            ");
+
+            $insertStmt->execute([
+                ':book_id'      => $bookId,
+                ':user_id'      => ($userId && $userId > 0) ? $userId : null,
+                ':buyer_name'   => $finalName,
+                ':buyer_email'  => $finalEmail,
+                ':buyer_phone'  => $finalPhone,
+                ':amount'       => $paidAmount,
+                ':currency'     => $currency,
+                ':reference'    => $reference,
+                ':access_token' => $accessToken
+            ]);
+
+            $purchaseId = (int)$pdo->lastInsertId();
+
+            // Also record in payments table for consolidated financial reporting
+            try {
+                $payStmt = $pdo->prepare("
+                    INSERT INTO payments (user_id, amount, transaction_id, status, payment_method, type)
+                    VALUES (:user_id, :amount, :transaction_id, 'success', 'paystack', 'book_purchase')
+                ");
+                $payStmt->execute([
+                    ':user_id'        => ($userId && $userId > 0) ? $userId : null,
+                    ':amount'         => $paidAmount,
+                    ':transaction_id' => $reference
+                ]);
+            } catch (Exception $pe) {
+                // If payments table has different schema or type column, fail silently
+            }
+
+            return [
+                'success'      => true,
+                'access_token' => $accessToken,
+                'purchase_id'  => $purchaseId,
+                'book'         => $book,
+                'redirect_url' => 'order_success.php?token=' . urlencode($accessToken)
+            ];
+        } catch (Exception $e) {
+            error_log("Save book purchase error: " . $e->getMessage());
+            return ['success' => false, 'error' => 'Database error while saving purchase: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Retrieve a purchase along with its book info using an access token
+     */
+    public static function getPurchaseByToken(string $token): ?array {
+        self::ensureTable();
+        $pdo = DB::pdo();
+        try {
+            $stmt = $pdo->prepare("
+                SELECT p.*, b.title AS book_title, b.author AS book_author, b.category AS book_category,
+                       b.cover_image, b.description AS book_description, b.short_description AS book_short_desc,
+                       b.delivery_type, b.pdf_file, b.download_link, b.whatsapp_number, b.pages_count
+                FROM book_purchases p
+                JOIN books b ON p.book_id = b.id
+                WHERE p.access_token = :token AND p.status = 'success'
+                LIMIT 1
+            ");
+            $stmt->execute([':token' => $token]);
+            $purchase = $stmt->fetch();
+            return $purchase ?: null;
+        } catch (Exception $e) {
+            error_log("Get purchase by token error: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Retrieve all purchases made by a specific user (by ID or email)
+     */
+    public static function getPurchasesByUser(int $userId, ?string $email = null): array {
+        self::ensureTable();
+        $pdo = DB::pdo();
+        try {
+            $stmt = $pdo->prepare("
+                SELECT p.*, b.title AS book_title, b.author AS book_author, b.category AS book_category,
+                       b.cover_image, b.delivery_type, b.pdf_file, b.download_link, b.whatsapp_number, b.pages_count
+                FROM book_purchases p
+                JOIN books b ON p.book_id = b.id
+                WHERE (p.user_id = :uid OR (p.buyer_email = :email AND :email != '')) AND p.status = 'success'
+                ORDER BY p.id DESC
+            ");
+            $stmt->execute([
+                ':uid'   => $userId,
+                ':email' => $email ?? ''
+            ]);
+            return $stmt->fetchAll() ?: [];
+        } catch (Exception $e) {
+            error_log("Get purchases by user error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Retrieve all recent purchases for admin catalog view
+     */
+    public static function getAllPurchases(int $limit = 100): array {
+        self::ensureTable();
+        $pdo = DB::pdo();
+        try {
+            $stmt = $pdo->prepare("
+                SELECT p.*, b.title AS book_title, b.delivery_type, b.cover_image
+                FROM book_purchases p
+                JOIN books b ON p.book_id = b.id
+                ORDER BY p.id DESC
+                LIMIT :lim
+            ");
+            $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll() ?: [];
+        } catch (Exception $e) {
+            error_log("Get all purchases error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Increment download count for a purchase
+     */
+    public static function incrementDownloadCount(int $purchaseId): void {
+        $pdo = DB::pdo();
+        try {
+            $stmt = $pdo->prepare("UPDATE book_purchases SET download_count = download_count + 1 WHERE id = ?");
+            $stmt->execute([$purchaseId]);
+        } catch (Exception $e) {
+            // Ignored
+        }
+    }
+
+    /**
+     * Generate Post-Purchase WhatsApp Access URL
+     */
+    public static function getWhatsAppAccessUrl(array $book, array $purchase): string {
+        $rawPhone = !empty($book['whatsapp_number']) ? $book['whatsapp_number'] : Settings::get('support_phone', '09067619370');
+        
+        $cleanPhone = preg_replace('/[^0-9]/', '', $rawPhone);
+        if (substr($cleanPhone, 0, 1) === '0') {
+            $cleanPhone = '234' . substr($cleanPhone, 1);
+        }
+
+        $currency = Settings::getCurrencySymbol();
+        $amountStr = $currency . number_format((float)($purchase['amount'] ?? $book['price']), 2);
+        $title = $book['book_title'] ?? $book['title'] ?? 'Digital Publication';
+        $ref = $purchase['reference'] ?? 'ONLINE-ORDER';
+        $buyerEmail = $purchase['buyer_email'] ?? '';
+
+        $message = "Hello Crown Night Star! 🌟\n\nI have successfully completed payment for:\n📖 *{$title}*\n💰 Amount Paid: {$amountStr}\n🔖 Order Reference: {$ref}\n📧 My Email: {$buyerEmail}\n\nPlease grant me immediate access / add me to the masterclass channel. Thank you!";
+        
+        return "https://api.whatsapp.com/send?phone=" . urlencode($cleanPhone) . "&text=" . urlencode($message);
+    }
+
+    /**
+     * Generate pre-order WhatsApp redirect URL (fallback)
      */
     public static function getWhatsAppUrl(array $book, ?string $phone = null): string {
         $currency = Settings::getCurrencySymbol();
         $rawPhone = !empty($book['whatsapp_number']) ? $book['whatsapp_number'] : ($phone ?: Settings::get('support_phone', '09067619370'));
         
-        // Sanitize phone number to international format
         $cleanPhone = preg_replace('/[^0-9]/', '', $rawPhone);
         if (substr($cleanPhone, 0, 1) === '0') {
             $cleanPhone = '234' . substr($cleanPhone, 1);

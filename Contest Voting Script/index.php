@@ -43,6 +43,12 @@ try {
 
 // 5. Fetch Featured Bookstore Publications
 $featuredBooks = BookstoreService::getActiveBooks();
+$paystackPublicKey = Env::get('PAYSTACK_PUBLIC_KEY', '');
+$currentUser = Auth::getCurrentUser();
+$buyerDefaultName = $currentUser['full_name'] ?? '';
+$buyerDefaultEmail = $currentUser['email'] ?? '';
+$buyerDefaultPhone = $currentUser['phone_number'] ?? '';
+$buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
@@ -449,19 +455,9 @@ $featuredBooks = BookstoreService::getActiveBooks();
                                                 </p>
                                             </div>
                                             <div>
-                                                <?php if ($b['delivery_type'] === 'whatsapp'): ?>
-                                                    <a href="<?= e($whatsAppUrl) ?>" target="_blank" class="btn btn-success btn-sm w-100 fw-bold">
-                                                        <i class="fab fa-whatsapp me-1"></i> Order Book (<?= $priceStr ?>)
-                                                    </a>
-                                                <?php elseif ($b['delivery_type'] === 'pdf' && !empty($b['pdf_file'])): ?>
-                                                    <a href="download_book.php?id=<?= $b['id'] ?>" class="btn btn-warning btn-sm w-100 fw-bold">
-                                                        <i class="fas fa-download me-1"></i> Download PDF
-                                                    </a>
-                                                <?php else: ?>
-                                                    <a href="bookstore.php" class="btn btn-warning btn-sm w-100 fw-bold">
-                                                        <i class="fas fa-eye me-1"></i> View in Bookstore
-                                                    </a>
-                                                <?php endif; ?>
+                                                <button type="button" class="btn btn-gold btn-sm w-100 fw-bold py-2" onclick="startIndexBookCheckout(<?= htmlspecialchars(json_encode($b), ENT_QUOTES, 'UTF-8') ?>)">
+                                                    <i class="fas fa-shopping-bag me-1"></i> Order Now (<?= $priceStr ?>)
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -530,8 +526,168 @@ $featuredBooks = BookstoreService::getActiveBooks();
     </div>
 </footer>
 
+<!-- Index Book Checkout Modal -->
+<div class="modal fade" id="indexCheckoutBookModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border border-secondary">
+            <div class="modal-header border-secondary border-opacity-25">
+                <h5 class="modal-title fw-bold text-white"><i class="fas fa-lock text-warning me-2"></i> Digital Book Checkout</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex align-items-center gap-3 p-3 rounded-3 bg-black border border-secondary mb-3">
+                    <img id="idxCheckoutCover" src="" width="55" height="75" class="rounded object-fit-cover shadow">
+                    <div class="flex-grow-1">
+                        <span class="badge bg-warning text-dark mb-1 small" id="idxCheckoutCategory"></span>
+                        <h6 class="fw-bold text-white mb-0" id="idxCheckoutTitle"></h6>
+                        <span class="text-warning fw-bold fs-6" id="idxCheckoutPrice"></span>
+                    </div>
+                </div>
+
+                <div class="alert alert-info border-0 p-2 small mb-3" style="background: rgba(13, 110, 253, 0.15); color: #70b8ff;">
+                    <i class="fas fa-info-circle me-1"></i> Your instant access link and download credentials will be delivered immediately upon payment.
+                </div>
+
+                <form id="idxCheckoutForm" onsubmit="event.preventDefault(); processIndexBookPayment();">
+                    <input type="hidden" id="idxCheckoutBookId" value="">
+                    <input type="hidden" id="idxCheckoutAmountNumber" value="0">
+
+                    <div class="mb-3">
+                        <label class="form-label text-light small fw-semibold">Your Full Name *</label>
+                        <input type="text" id="idxCheckoutBuyerName" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Jane Doe" value="<?= e($buyerDefaultName) ?>" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-light small fw-semibold">Your Email Address * <span class="text-secondary">(Required for delivery)</span></label>
+                        <input type="email" id="idxCheckoutBuyerEmail" class="form-control bg-dark border-secondary text-white" placeholder="youremail@example.com" value="<?= e($buyerDefaultEmail) ?>" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-light small fw-semibold">Phone Number / WhatsApp (Optional)</label>
+                        <input type="tel" id="idxCheckoutBuyerPhone" class="form-control bg-dark border-secondary text-white" placeholder="090..." value="<?= e($buyerDefaultPhone) ?>">
+                    </div>
+
+                    <div id="idxCheckoutStatusMessage" class="d-none alert mb-3 small"></div>
+
+                    <button type="submit" id="idxPaystackPayBtn" class="btn btn-gold w-100 py-3 fw-bold">
+                        <i class="fas fa-shield-alt me-1"></i> Pay with Paystack
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="assets2/js/bootstrap.bundle.min.js"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
 <script>
+const CURRENCY_SYMBOL = '<?= e($currencySymbol) ?>';
+const PAYSTACK_PUBLIC_KEY = '<?= e($paystackPublicKey) ?>';
+const LOGGED_IN_USER_ID = <?= $buyerUserId ?>;
+
+let activeIdxSelectedBook = null;
+
+function startIndexBookCheckout(book) {
+    activeIdxSelectedBook = book;
+    document.getElementById('idxCheckoutBookId').value = book.id;
+    document.getElementById('idxCheckoutAmountNumber').value = book.price;
+    document.getElementById('idxCheckoutCover').src = book.cover_image;
+    document.getElementById('idxCheckoutTitle').innerText = book.title;
+    document.getElementById('idxCheckoutCategory').innerText = book.category || 'Digital Publication';
+    document.getElementById('idxCheckoutPrice').innerText = CURRENCY_SYMBOL + parseFloat(book.price).toLocaleString(undefined, {minimumFractionDigits: 2});
+
+    const statusBox = document.getElementById('idxCheckoutStatusMessage');
+    statusBox.className = 'd-none alert mb-3 small';
+    statusBox.innerText = '';
+
+    const modal = new bootstrap.Modal(document.getElementById('indexCheckoutBookModal'));
+    modal.show();
+}
+
+function processIndexBookPayment() {
+    const bookId = parseInt(document.getElementById('idxCheckoutBookId').value, 10);
+    const amount = parseFloat(document.getElementById('idxCheckoutAmountNumber').value);
+    const email = document.getElementById('idxCheckoutBuyerEmail').value.trim();
+    const name = document.getElementById('idxCheckoutBuyerName').value.trim();
+    const phone = document.getElementById('idxCheckoutBuyerPhone').value.trim();
+    const statusBox = document.getElementById('idxCheckoutStatusMessage');
+    const payBtn = document.getElementById('idxPaystackPayBtn');
+
+    if (!email) {
+        statusBox.className = 'alert alert-danger mb-3 small';
+        statusBox.innerText = 'Please enter a valid email address.';
+        return;
+    }
+
+    if (!PAYSTACK_PUBLIC_KEY) {
+        statusBox.className = 'alert alert-danger mb-3 small';
+        statusBox.innerText = 'Payment gateway is not configured. Please contact administrator.';
+        return;
+    }
+
+    const handler = PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: email,
+        amount: Math.round(amount * 100),
+        currency: 'NGN',
+        metadata: {
+            custom_fields: [
+                { display_name: "Type", variable_name: "purchase_type", value: "digital_book" },
+                { display_name: "Book ID", variable_name: "book_id", value: bookId },
+                { display_name: "Book Title", variable_name: "book_title", value: activeIdxSelectedBook ? activeIdxSelectedBook.title : "" },
+                { display_name: "Buyer Name", variable_name: "buyer_name", value: name },
+                { display_name: "Buyer Phone", variable_name: "buyer_phone", value: phone }
+            ]
+        },
+        callback: function(response) {
+            statusBox.className = 'alert alert-warning mb-3 small';
+            statusBox.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Verifying payment and generating your digital access...';
+            payBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('reference', response.reference);
+            formData.append('book_id', bookId);
+            formData.append('email', email);
+            formData.append('name', name);
+            formData.append('phone', phone);
+            if (LOGGED_IN_USER_ID > 0) {
+                formData.append('user_id', LOGGED_IN_USER_ID);
+            }
+
+            fetch('verify_book_purchase.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    statusBox.className = 'alert alert-success mb-3 small';
+                    statusBox.innerHTML = '<i class="fas fa-check-circle me-1"></i> Success! Redirecting to your digital access hub...';
+                    setTimeout(() => {
+                        window.location.href = data.redirect_url;
+                    }, 1200);
+                } else {
+                    statusBox.className = 'alert alert-danger mb-3 small';
+                    statusBox.innerText = data.error || 'Payment verification failed.';
+                    payBtn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                statusBox.className = 'alert alert-danger mb-3 small';
+                statusBox.innerText = 'Network error while verifying payment. Please refresh and contact support.';
+                payBtn.disabled = false;
+            });
+        },
+        onClose: function() {
+            statusBox.className = 'alert alert-secondary mb-3 small';
+            statusBox.innerText = 'Payment window was closed.';
+        }
+    });
+
+    handler.openIframe();
+}
+
 // Search Filter
 function filterContestants() {
     const query = document.getElementById('contestantSearch').value.toLowerCase().trim();

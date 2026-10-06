@@ -113,6 +113,14 @@ $endTime = Settings::getCompetitionEndTime();
 $currency = Settings::getCurrencySymbol();
 $siteUrl = Env::get('APP_URL', 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
 $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
+
+// 4. Fetch User's Purchased Books & Masterclasses
+$myPurchases = [];
+try {
+    $myPurchases = BookstoreService::getPurchasesByUser($userId, $user['email'] ?? '');
+} catch (Exception $e) {
+    $myPurchases = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
@@ -390,6 +398,51 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
                         <i class="fab fa-facebook"></i> Share on Facebook
                     </a>
                 </div>
+            </div>
+
+            <!-- Purchased Digital Publications & Courses -->
+            <div class="dashboard-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-white mb-0"><i class="fas fa-book-open text-warning me-2"></i> My Purchased Books & Masterclasses</h5>
+                    <a href="bookstore.php" class="btn btn-outline-warning btn-sm" style="font-size: 11px;">
+                        <i class="fas fa-shopping-bag me-1"></i> Browse Bookstore
+                    </a>
+                </div>
+
+                <?php if (empty($myPurchases)): ?>
+                    <div class="p-3 rounded-3 text-center border border-secondary border-opacity-25" style="background: rgba(13, 10, 28, 0.5);">
+                        <i class="fas fa-book-reader fa-2x text-secondary mb-2 d-block opacity-50"></i>
+                        <p class="text-secondary small mb-2">You have not purchased any digital guides or contest masterclasses yet.</p>
+                        <a href="bookstore.php" class="btn btn-gold btn-sm"><i class="fas fa-search me-1"></i> Explore Contest Bookstore</a>
+                    </div>
+                <?php else: ?>
+                    <div class="row g-3">
+                        <?php foreach ($myPurchases as $mp): ?>
+                            <?php
+                                $mpCover = $mp['cover_image'] ?? 'assets2/images/book1.jpg';
+                                if (!file_exists(__DIR__ . '/' . $mpCover) && file_exists(__DIR__ . '/assets2/images/book1.jpg')) {
+                                    $mpCover = 'assets2/images/book1.jpg';
+                                }
+                                $accessUrl = 'order_success.php?token=' . urlencode($mp['access_token']);
+                            ?>
+                            <div class="col-12 col-md-6">
+                                <div class="p-3 rounded-3 bg-dark border border-secondary d-flex gap-3 align-items-center h-100 shadow-sm">
+                                    <img src="<?= e($mpCover) ?>" alt="Cover" class="rounded object-fit-cover shadow" style="width: 50px; height: 70px;">
+                                    <div class="flex-grow-1">
+                                        <span class="badge bg-warning text-dark mb-1" style="font-size: 10px;"><?= e($mp['book_category'] ?? 'Guide') ?></span>
+                                        <h6 class="fw-bold text-white mb-1 small text-truncate" title="<?= e($mp['book_title']) ?>"><?= e($mp['book_title']) ?></h6>
+                                        <div class="text-secondary small mb-2" style="font-size: 11px;">
+                                            <i class="fas fa-check-circle text-success me-1"></i> Purchased <?= date('M d, Y', strtotime($mp['created_at'])) ?>
+                                        </div>
+                                        <a href="<?= e($accessUrl) ?>" class="btn btn-gold btn-sm py-1 px-2" style="font-size: 11px;">
+                                            <i class="fas fa-external-link-alt me-1"></i> Access Materials
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <!-- Recent Supporter Votes -->

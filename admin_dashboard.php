@@ -401,6 +401,17 @@ try {
     $books = [];
 }
 
+// 6. Recent Digital Book Purchases (Fail-Safe)
+$bookPurchases = [];
+$totalBookSales = 0.0;
+try {
+    $bookPurchases = BookstoreService::getAllPurchases(50);
+    $totalBookSales = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM book_purchases WHERE status = 'success'")->fetchColumn();
+} catch (Exception $e) {
+    $bookPurchases = [];
+    $totalBookSales = 0.0;
+}
+
 $currentStage = Settings::getCurrentStage();
 $isRegOpen = Settings::isRegistrationOpen();
 $competitionEndTime = Settings::getCompetitionEndTime();
@@ -1053,6 +1064,72 @@ $currency = Settings::getCurrencySymbol();
                         </div>
                     </div>
                 </div>
+
+                <!-- Recent Book Sales & Customer Delivery Ledger -->
+                <div class="col-12">
+                    <div class="content-panel">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+                            <div>
+                                <h5 class="fw-bold text-white mb-0"><i class="fas fa-receipt text-warning me-2"></i> Verified Book Orders & Customer Access (<?= count($bookPurchases) ?>)</h5>
+                                <p class="text-secondary small mb-0">Total Book Sales Revenue: <strong class="text-success"><?= $currency . number_format($totalBookSales, 2) ?></strong></p>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-custom">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Publication</th>
+                                        <th>Customer</th>
+                                        <th>Amount</th>
+                                        <th>Reference</th>
+                                        <th>Access Hub</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($bookPurchases)): ?>
+                                        <tr>
+                                            <td colspan="6" class="text-center py-4 text-secondary">
+                                                <i class="fas fa-shopping-cart fa-2x mb-2 d-block opacity-50"></i>
+                                                No book orders recorded yet. Once customers order via Paystack, their transactions and access links will appear here.
+                                            </td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($bookPurchases as $bp): ?>
+                                            <tr>
+                                                <td class="small text-secondary"><?= date('M d, Y h:i A', strtotime($bp['created_at'])) ?></td>
+                                                <td>
+                                                    <div class="fw-bold text-white small"><?= e($bp['book_title']) ?></div>
+                                                    <span class="badge bg-dark text-secondary border border-secondary" style="font-size: 10px;"><?= strtoupper(e($bp['delivery_type'])) ?></span>
+                                                </td>
+                                                <td>
+                                                    <div class="text-white small fw-bold"><?= e($bp['buyer_name']) ?></div>
+                                                    <div class="text-secondary small" style="font-size: 11px;"><i class="fas fa-envelope me-1"></i> <?= e($bp['buyer_email']) ?></div>
+                                                    <?php if (!empty($bp['buyer_phone'])): ?>
+                                                        <div class="text-secondary small" style="font-size: 11px;"><i class="fas fa-phone me-1"></i> <?= e($bp['buyer_phone']) ?></div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <span class="fw-bold text-warning"><?= $currency . number_format((float)$bp['amount'], 2) ?></span>
+                                                </td>
+                                                <td>
+                                                    <code class="text-info small"><?= e($bp['reference']) ?></code>
+                                                </td>
+                                                <td>
+                                                    <a href="order_success.php?token=<?= urlencode($bp['access_token']) ?>" target="_blank" class="btn btn-outline-warning btn-sm py-1 px-2" style="font-size: 11px;" title="Open Customer Access Hub">
+                                                        <i class="fas fa-external-link-alt me-1"></i> View Access Hub
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 

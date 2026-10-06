@@ -20,6 +20,13 @@ if (!empty($search)) {
 $siteTitle = Settings::get('site_title', 'Crown Night Star');
 $currency = Settings::getCurrencySymbol();
 $isRegistrationOpen = Settings::isRegistrationOpen();
+$paystackPublicKey = Env::get('PAYSTACK_PUBLIC_KEY', '');
+
+$currentUser = Auth::getCurrentUser();
+$buyerDefaultName = $currentUser['full_name'] ?? '';
+$buyerDefaultEmail = $currentUser['email'] ?? '';
+$buyerDefaultPhone = $currentUser['phone_number'] ?? '';
+$buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
 
 // Get unique categories
 $pdo = DB::pdo();
@@ -145,16 +152,18 @@ try {
         .btn-gold {
             background: linear-gradient(135deg, #ffd700 0%, #d4af37 100%);
             color: #0d1117;
-            font-weight: 700;
-            border-radius: 8px;
+            font-weight: 800;
+            border-radius: 10px;
             border: none;
             padding: 10px 18px;
             transition: all 0.2s ease;
+            text-decoration: none;
         }
         .btn-gold:hover {
             background: linear-gradient(135deg, #ffe033 0%, #e5bd3b 100%);
             color: #0d1117;
             transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 215, 0, 0.3);
         }
         .category-pill {
             display: inline-block;
@@ -183,13 +192,12 @@ try {
 </head>
 <body>
 
-<!-- Navbar -->
+<!-- Navigation -->
 <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top py-3">
     <div class="container">
-        <a class="navbar-brand fw-bold text-white d-flex align-items-center gap-2" href="index.php">
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center gap-2 fs-4" href="index.php">
             <i class="fas fa-crown text-warning"></i> <?= e($siteTitle) ?>
         </a>
-
         <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -222,12 +230,12 @@ try {
 <section class="hero-banner">
     <div class="container">
         <div class="store-pill">
-            <i class="fas fa-book-reader me-1"></i> Official Digital Publications
+            <i class="fas fa-book-reader me-1"></i> Official Digital Publications & Masterclasses
         </div>
 
         <h1 class="hero-title">Knowledge, Growth & Masterclasses</h1>
         <p class="text-secondary fs-5 mb-4 mx-auto" style="max-width: 680px;">
-            Elevate your personal brand, stage performance, and public campaign strategy with our curated digital ebooks and guides.
+            Elevate your personal brand, stage performance, and public campaign strategy with instant access to our curated digital books and guides.
         </p>
 
         <!-- Search Bar -->
@@ -269,7 +277,6 @@ try {
                 <?php foreach ($allBooks as $b): ?>
                     <?php
                         $priceStr = $currency . number_format((float)$b['price'], 2);
-                        $whatsAppUrl = BookstoreService::getWhatsAppUrl($b);
                         $coverPath = $b['cover_image'];
                         if (!file_exists(__DIR__ . '/' . $coverPath) && file_exists(__DIR__ . '/assets2/images/book1.jpg')) {
                             $coverPath = 'assets2/images/book1.jpg';
@@ -282,9 +289,9 @@ try {
                                 <?php if ($b['delivery_type'] === 'pdf'): ?>
                                     <span class="delivery-badge badge-pdf"><i class="fas fa-file-pdf me-1"></i> Instant PDF</span>
                                 <?php elseif ($b['delivery_type'] === 'link'): ?>
-                                    <span class="delivery-badge badge-link"><i class="fas fa-link me-1"></i> Direct Access</span>
+                                    <span class="delivery-badge badge-link"><i class="fas fa-graduation-cap me-1"></i> Course Portal</span>
                                 <?php else: ?>
-                                    <span class="delivery-badge badge-whatsapp"><i class="fab fa-whatsapp me-1"></i> WhatsApp Order</span>
+                                    <span class="delivery-badge badge-whatsapp"><i class="fab fa-whatsapp me-1"></i> VIP Channel</span>
                                 <?php endif; ?>
                                 
                                 <img src="<?= e($coverPath) ?>" alt="<?= e($b['title']) ?>" class="book-cover-img" loading="lazy">
@@ -298,7 +305,7 @@ try {
                                     <h5 class="fw-bold text-white mb-1" style="font-size: 16px; line-height: 1.4;">
                                         <?= e($b['title']) ?>
                                     </h5>
-                                    <p class="text-secondary small mb-2">By <span class="text-light"><?= e($b['author']) ?></span></p>
+                                    <p class="text-secondary small mb-2">By <span class="text-light"><?= e($b['author']) ?></span> &bull; <span class="text-secondary"><?= (int)$b['pages_count'] ?> pages</span></p>
                                     <p class="text-secondary small mb-3" style="font-size: 12px; line-height: 1.5;">
                                         <?= e($b['short_description'] ?? substr($b['description'], 0, 100) . '...') ?>
                                     </p>
@@ -306,23 +313,10 @@ try {
 
                                 <div class="pt-3 border-top border-secondary border-opacity-25">
                                     <div class="d-grid gap-2">
-                                        <?php if ($b['delivery_type'] === 'whatsapp'): ?>
-                                            <a href="<?= e($whatsAppUrl) ?>" target="_blank" class="btn btn-success fw-bold btn-sm py-2">
-                                                <i class="fab fa-whatsapp me-1"></i> Order via WhatsApp (<?= $priceStr ?>)
-                                            </a>
-                                        <?php elseif ($b['delivery_type'] === 'pdf' && !empty($b['pdf_file'])): ?>
-                                            <a href="download_book.php?id=<?= $b['id'] ?>" class="btn btn-gold fw-bold btn-sm py-2">
-                                                <i class="fas fa-download me-1"></i> Download PDF (<?= $priceStr ?>)
-                                            </a>
-                                        <?php elseif ($b['delivery_type'] === 'link' && !empty($b['download_link'])): ?>
-                                            <a href="<?= e($b['download_link']) ?>" target="_blank" class="btn btn-gold fw-bold btn-sm py-2">
-                                                <i class="fas fa-external-link-alt me-1"></i> Access Digital Book
-                                            </a>
-                                        <?php else: ?>
-                                            <a href="<?= e($whatsAppUrl) ?>" target="_blank" class="btn btn-success fw-bold btn-sm py-2">
-                                                <i class="fab fa-whatsapp me-1"></i> Order Book (<?= $priceStr ?>)
-                                            </a>
-                                        <?php endif; ?>
+                                        <!-- Instant Paystack Purchase Trigger -->
+                                        <button type="button" class="btn btn-gold btn-sm py-2" onclick="startBookCheckout(<?= htmlspecialchars(json_encode($b), ENT_QUOTES, 'UTF-8') ?>)">
+                                            <i class="fas fa-shopping-bag me-1"></i> Order Now (<?= $priceStr ?>)
+                                        </button>
 
                                         <button type="button" class="btn btn-outline-secondary btn-sm" onclick="openBookModal(<?= htmlspecialchars(json_encode($b), ENT_QUOTES, 'UTF-8') ?>)">
                                             <i class="fas fa-eye me-1"></i> Preview Synopsis & Excerpt
@@ -350,7 +344,7 @@ try {
                 <div class="row g-4">
                     <div class="col-md-4 text-center">
                         <img id="modalBookCover" src="" alt="Book Cover" class="img-fluid rounded-3 shadow mb-3" style="max-height: 280px;">
-                        <div class="p-2 rounded-3 bg-dark border border-secondary mb-2">
+                        <div class="p-2 rounded-3 bg-dark border border-secondary mb-3">
                             <span class="text-secondary small d-block">Price</span>
                             <span class="fs-5 fw-bold text-warning" id="modalBookPrice"></span>
                         </div>
@@ -377,6 +371,60 @@ try {
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Checkout / Order Modal -->
+<div class="modal fade" id="checkoutBookModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-secondary border-opacity-25">
+                <h5 class="modal-title fw-bold text-white"><i class="fas fa-lock text-warning me-2"></i> Digital Book Checkout</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Book Info Card -->
+                <div class="d-flex align-items-center gap-3 p-3 rounded-3 bg-dark border border-secondary mb-3">
+                    <img id="checkoutCover" src="" width="55" height="75" class="rounded object-fit-cover shadow">
+                    <div class="flex-grow-1">
+                        <span class="badge bg-warning text-dark mb-1 small" id="checkoutCategory"></span>
+                        <h6 class="fw-bold text-white mb-0" id="checkoutTitle"></h6>
+                        <span class="text-warning fw-bold fs-6" id="checkoutPrice"></span>
+                    </div>
+                </div>
+
+                <div class="alert alert-info border-0 p-2 small mb-3" style="background: rgba(13, 110, 253, 0.15); color: #70b8ff;">
+                    <i class="fas fa-info-circle me-1"></i> Your instant access link and download credentials will be delivered immediately upon payment.
+                </div>
+
+                <!-- Buyer Form -->
+                <form id="checkoutForm" onsubmit="event.preventDefault(); processPaystackPayment();">
+                    <input type="hidden" id="checkoutBookId" value="">
+                    <input type="hidden" id="checkoutAmountNumber" value="0">
+
+                    <div class="mb-3">
+                        <label class="form-label text-light small fw-semibold">Your Full Name *</label>
+                        <input type="text" id="checkoutBuyerName" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Jane Doe" value="<?= e($buyerDefaultName) ?>" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-light small fw-semibold">Your Email Address * <span class="text-secondary">(Required for delivery)</span></label>
+                        <input type="email" id="checkoutBuyerEmail" class="form-control bg-dark border-secondary text-white" placeholder="youremail@example.com" value="<?= e($buyerDefaultEmail) ?>" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-light small fw-semibold">Phone Number / WhatsApp (Optional)</label>
+                        <input type="tel" id="checkoutBuyerPhone" class="form-control bg-dark border-secondary text-white" placeholder="090..." value="<?= e($buyerDefaultPhone) ?>">
+                    </div>
+
+                    <div id="checkoutStatusMessage" class="d-none alert mb-3 small"></div>
+
+                    <button type="submit" id="paystackPayBtn" class="btn btn-gold w-100 py-3 fw-bold">
+                        <i class="fas fa-shield-alt me-1"></i> Pay with Paystack
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -423,38 +471,138 @@ try {
 </footer>
 
 <script src="assets2/js/bootstrap.bundle.min.js"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
+
 <script>
+const CURRENCY_SYMBOL = '<?= e($currency) ?>';
+const PAYSTACK_PUBLIC_KEY = '<?= e($paystackPublicKey) ?>';
+const LOGGED_IN_USER_ID = <?= $buyerUserId ?>;
+
+let activeSelectedBook = null;
+
 function openBookModal(book) {
+    activeSelectedBook = book;
     document.getElementById('modalBookHeading').innerText = book.title;
     document.getElementById('modalBookAuthor').innerText = book.author;
     document.getElementById('modalBookCategory').innerText = book.category || 'General';
-    document.getElementById('modalBookPrice').innerText = '<?= $currency ?>' + parseFloat(book.price).toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('modalBookPrice').innerText = CURRENCY_SYMBOL + parseFloat(book.price).toLocaleString(undefined, {minimumFractionDigits: 2});
     document.getElementById('modalBookCover').src = book.cover_image;
     document.getElementById('tabDesc').innerText = book.description;
     document.getElementById('tabPreview').innerText = book.preview_text || "No preview excerpt available for this publication.";
 
+    const priceFormatted = CURRENCY_SYMBOL + parseFloat(book.price).toLocaleString(undefined, {minimumFractionDigits: 2});
     const btnContainer = document.getElementById('modalOrderBtnContainer');
-    btnContainer.innerHTML = '';
-
-    const priceFormatted = '<?= $currency ?>' + parseFloat(book.price).toLocaleString(undefined, {minimumFractionDigits: 2});
-
-    if (book.delivery_type === 'whatsapp') {
-        let phone = book.whatsapp_number || '<?= Settings::get('support_phone', '09067619370') ?>';
-        phone = phone.replace(/[^0-9]/g, '');
-        if (phone.startsWith('0')) phone = '234' + phone.substring(1);
-        const msg = encodeURIComponent(`Hello Crown Night Star, I would like to order the book "${book.title}" (${priceFormatted}).`);
-        btnContainer.innerHTML = `<a href="https://api.whatsapp.com/send?phone=${phone}&text=${msg}" target="_blank" class="btn btn-success fw-bold btn-sm"><i class="fab fa-whatsapp me-1"></i> Buy via WhatsApp</a>`;
-    } else if (book.delivery_type === 'pdf' && book.pdf_file) {
-        btnContainer.innerHTML = `<a href="download_book.php?id=${book.id}" class="btn btn-gold fw-bold btn-sm"><i class="fas fa-download me-1"></i> Download PDF (${priceFormatted})</a>`;
-    } else if (book.delivery_type === 'link' && book.download_link) {
-        btnContainer.innerHTML = `<a href="${book.download_link}" target="_blank" class="btn btn-gold fw-bold btn-sm"><i class="fas fa-external-link-alt me-1"></i> Access Book (${priceFormatted})</a>`;
-    } else {
-        btnContainer.innerHTML = `<a href="contact-us.php" class="btn btn-gold fw-bold btn-sm">Contact to Purchase</a>`;
-    }
+    btnContainer.innerHTML = `
+        <button type="button" class="btn btn-gold fw-bold btn-sm py-2" onclick="bootstrap.Modal.getInstance(document.getElementById('bookModal')).hide(); startBookCheckout(activeSelectedBook);">
+            <i class="fas fa-shopping-bag me-1"></i> Order Now (${priceFormatted})
+        </button>
+    `;
 
     const modal = new bootstrap.Modal(document.getElementById('bookModal'));
     modal.show();
 }
+
+function startBookCheckout(book) {
+    activeSelectedBook = book;
+    document.getElementById('checkoutBookId').value = book.id;
+    document.getElementById('checkoutAmountNumber').value = book.price;
+    document.getElementById('checkoutCover').src = book.cover_image;
+    document.getElementById('checkoutTitle').innerText = book.title;
+    document.getElementById('checkoutCategory').innerText = book.category || 'Digital Publication';
+    document.getElementById('checkoutPrice').innerText = CURRENCY_SYMBOL + parseFloat(book.price).toLocaleString(undefined, {minimumFractionDigits: 2});
+
+    const statusBox = document.getElementById('checkoutStatusMessage');
+    statusBox.className = 'd-none alert mb-3 small';
+    statusBox.innerText = '';
+
+    const modal = new bootstrap.Modal(document.getElementById('checkoutBookModal'));
+    modal.show();
+}
+
+function processPaystackPayment() {
+    const bookId = parseInt(document.getElementById('checkoutBookId').value, 10);
+    const amount = parseFloat(document.getElementById('checkoutAmountNumber').value);
+    const email = document.getElementById('checkoutBuyerEmail').value.trim();
+    const name = document.getElementById('checkoutBuyerName').value.trim();
+    const phone = document.getElementById('checkoutBuyerPhone').value.trim();
+    const statusBox = document.getElementById('checkoutStatusMessage');
+    const payBtn = document.getElementById('paystackPayBtn');
+
+    if (!email) {
+        statusBox.className = 'alert alert-danger mb-3 small';
+        statusBox.innerText = 'Please enter a valid email address.';
+        return;
+    }
+
+    if (!PAYSTACK_PUBLIC_KEY) {
+        statusBox.className = 'alert alert-danger mb-3 small';
+        statusBox.innerText = 'Payment gateway public key is not configured. Please contact administrator.';
+        return;
+    }
+
+    const handler = PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: email,
+        amount: Math.round(amount * 100), // in kobo
+        currency: 'NGN',
+        metadata: {
+            custom_fields: [
+                { display_name: "Type", variable_name: "purchase_type", value: "digital_book" },
+                { display_name: "Book ID", variable_name: "book_id", value: bookId },
+                { display_name: "Book Title", variable_name: "book_title", value: activeSelectedBook ? activeSelectedBook.title : "" },
+                { display_name: "Buyer Name", variable_name: "buyer_name", value: name },
+                { display_name: "Buyer Phone", variable_name: "buyer_phone", value: phone }
+            ]
+        },
+        callback: function(response) {
+            statusBox.className = 'alert alert-warning mb-3 small';
+            statusBox.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Payment received! Verifying and generating your access token...';
+            payBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('reference', response.reference);
+            formData.append('book_id', bookId);
+            formData.append('email', email);
+            formData.append('name', name);
+            formData.append('phone', phone);
+            if (LOGGED_IN_USER_ID > 0) {
+                formData.append('user_id', LOGGED_IN_USER_ID);
+            }
+
+            fetch('verify_book_purchase.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    statusBox.className = 'alert alert-success mb-3 small';
+                    statusBox.innerHTML = '<i class="fas fa-check-circle me-1"></i> Success! Redirecting to your digital access hub...';
+                    setTimeout(() => {
+                        window.location.href = data.redirect_url;
+                    }, 1200);
+                } else {
+                    statusBox.className = 'alert alert-danger mb-3 small';
+                    statusBox.innerText = data.error || 'Payment verification failed. Please contact support with Ref: ' + response.reference;
+                    payBtn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                statusBox.className = 'alert alert-danger mb-3 small';
+                statusBox.innerText = 'Network error while verifying payment. Please refresh and contact support.';
+                payBtn.disabled = false;
+            });
+        },
+        onClose: function() {
+            statusBox.className = 'alert alert-secondary mb-3 small';
+            statusBox.innerText = 'Payment window was closed.';
+        }
+    });
+
+    handler.openIframe();
+}
 </script>
+
 </body>
 </html>
