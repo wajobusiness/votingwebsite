@@ -460,7 +460,7 @@ try {
             <div class="col-lg-4">
                 <h6 class="text-white fw-bold mb-3">Need Assistance?</h6>
                 <p class="text-secondary small mb-1"><i class="fas fa-envelope text-warning me-2"></i> <?= e(Settings::get('support_email', 'hello@theusersportal.cloud')) ?></p>
-                <p class="text-secondary small mb-0"><i class="fas fa-phone text-warning me-2"></i> <?= e(Settings::get('support_phone', '09067619370')) ?></p>
+                <p class="text-secondary small mb-0"><i class="fas fa-phone text-warning me-2"></i> <?= e(Settings::get('support_phone', '08139188570')) ?></p>
             </div>
         </div>
         <hr class="border-secondary opacity-25 my-4">

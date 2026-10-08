@@ -30,7 +30,7 @@ INSERT INTO `settings` (`name`, `value`) VALUES
 ('competition_end_time', '2026-12-31T23:59'),
 ('current_stage', 'Stage One'),
 ('support_email', 'hello@theusersportal.cloud'),
-('support_phone', '09067619370')
+('support_phone', '08139188570')
 ON DUPLICATE KEY UPDATE `value`=VALUES(`value`);
 
 -- --------------------------------------------------------

@@ -66,6 +66,10 @@ class BookstoreService {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
+            // Auto-update support phone to 08139188570 if old default is present
+            @$pdo->exec("UPDATE settings SET value = '08139188570' WHERE name = 'support_phone' AND value = '09067619370'");
+            @$pdo->exec("UPDATE books SET whatsapp_number = '08139188570' WHERE whatsapp_number = '09067619370'");
+
             self::seedSampleBooksIfEmpty();
         } catch (Exception $e) {
             error_log("Bookstore table init error: " . $e->getMessage());
@@ -80,7 +84,7 @@ class BookstoreService {
         try {
             $count = (int)$pdo->query("SELECT COUNT(*) FROM books")->fetchColumn();
             if ($count === 0) {
-                $supportPhone = Settings::get('support_phone', '09067619370');
+                $supportPhone = Settings::get('support_phone', '08139188570');
 
                 $sampleBooks = [
                     [
@@ -473,7 +477,7 @@ class BookstoreService {
      * Generate Post-Purchase WhatsApp Access URL
      */
     public static function getWhatsAppAccessUrl(array $book, array $purchase): string {
-        $rawPhone = !empty($book['whatsapp_number']) ? $book['whatsapp_number'] : Settings::get('support_phone', '09067619370');
+        $rawPhone = !empty($book['whatsapp_number']) ? $book['whatsapp_number'] : Settings::get('support_phone', '08139188570');
         
         $cleanPhone = preg_replace('/[^0-9]/', '', $rawPhone);
         if (substr($cleanPhone, 0, 1) === '0') {
@@ -496,7 +500,7 @@ class BookstoreService {
      */
     public static function getWhatsAppUrl(array $book, ?string $phone = null): string {
         $currency = Settings::getCurrencySymbol();
-        $rawPhone = !empty($book['whatsapp_number']) ? $book['whatsapp_number'] : ($phone ?: Settings::get('support_phone', '09067619370'));
+        $rawPhone = !empty($book['whatsapp_number']) ? $book['whatsapp_number'] : ($phone ?: Settings::get('support_phone', '08139188570'));
         
         $cleanPhone = preg_replace('/[^0-9]/', '', $rawPhone);
         if (substr($cleanPhone, 0, 1) === '0') {

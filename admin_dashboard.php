@@ -1219,7 +1219,7 @@ $currency = Settings::getCurrencySymbol();
 
                         <div class="col-md-8" id="add_whatsapp_box">
                             <label class="form-label small fw-semibold text-light">WhatsApp Order Number</label>
-                            <input type="text" name="whatsapp_number" class="form-control bg-dark border-secondary text-white" value="<?= e(Settings::get('support_phone', '09067619370')) ?>" placeholder="e.g. 09067619370">
+                            <input type="text" name="whatsapp_number" class="form-control bg-dark border-secondary text-white" value="<?= e(Settings::get('support_phone', '08139188570')) ?>" placeholder="e.g. 08139188570">
                             <div class="form-text text-secondary" style="font-size: 11px;">Buyers will be redirected to WhatsApp with prefilled title and price.</div>
                         </div>
 
@@ -1333,7 +1333,7 @@ $currency = Settings::getCurrencySymbol();
 
                         <div class="col-md-8 <?= $b['delivery_type'] !== 'whatsapp' ? 'd-none' : '' ?>" id="edit_<?= $b['id'] ?>_whatsapp_box">
                             <label class="form-label small fw-semibold text-light">WhatsApp Order Number</label>
-                            <input type="text" name="whatsapp_number" class="form-control bg-dark border-secondary text-white" value="<?= e($b['whatsapp_number'] ?? Settings::get('support_phone', '09067619370')) ?>">
+                            <input type="text" name="whatsapp_number" class="form-control bg-dark border-secondary text-white" value="<?= e($b['whatsapp_number'] ?? Settings::get('support_phone', '08139188570')) ?>">
                         </div>
 
                         <div class="col-md-8 <?= $b['delivery_type'] !== 'pdf' ? 'd-none' : '' ?>" id="edit_<?= $b['id'] ?>_pdf_box">

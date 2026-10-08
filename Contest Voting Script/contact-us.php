@@ -3,7 +3,7 @@ require_once __DIR__ . '/config.php';
 
 $siteTitle = Settings::get('site_title', 'Crown Night Star');
 $supportEmail = Settings::get('support_email', 'hello@theusersportal.cloud');
-$supportPhone = Settings::get('support_phone', '09067619370');
+$supportPhone = Settings::get('support_phone', '08139188570');
 $isRegistrationOpen = Settings::isRegistrationOpen();
 ?>
 <!DOCTYPE html>
