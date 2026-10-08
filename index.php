@@ -409,7 +409,7 @@ $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
         <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-3">
             <div>
                 <span class="badge bg-warning text-dark px-3 py-2 fw-bold text-uppercase mb-2"><i class="fas fa-book-open me-1"></i> Digital Publications</span>
-                <h2 class="fw-bold text-white mb-1">Official Contestant Bookstore & Guides</h2>
+                <h2 class="fw-bold text-white mb-1">Official Spiritual Bookstore</h2>
                 <p class="text-secondary small mb-0">Masterclasses and digital playbooks to supercharge your performance, charisma, and brand</p>
             </div>
             <div>
