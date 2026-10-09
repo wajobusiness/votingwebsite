@@ -104,12 +104,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             case 'upload_banner':
                 if (isset($_FILES['banner_image'])) {
-                    $upload = Security::handleFileUpload($_FILES['banner_image'], __DIR__ . '/uploads/', ['jpg', 'jpeg', 'png', 'webp'], 5);
+                    $upload = Security::handleFileUpload($_FILES['banner_image'], __DIR__ . '/uploads/', ['jpg', 'jpeg', 'png', 'webp'], 10);
                     if ($upload['success']) {
                         $targetPath = 'uploads/' . $upload['filename'];
+                        $linkUrl = trim($_POST['link_url'] ?? '');
                         $pdo->exec("UPDATE banner SET is_active = 0");
-                        $stmt = $pdo->prepare("INSERT INTO banner (image_path, is_active) VALUES (?, 1)");
-                        $stmt->execute([$targetPath]);
+                        $stmt = $pdo->prepare("INSERT INTO banner (image_path, link_url, is_active) VALUES (?, ?, 1)");
+                        $stmt->execute([$targetPath, !empty($linkUrl) ? $linkUrl : null]);
                         $_SESSION['flash_success'] = "Website hero banner updated successfully!";
                     } else {
                         $_SESSION['flash_error'] = "Banner upload failed: " . $upload['error'];
@@ -390,6 +391,14 @@ try {
     $competitions = $pdo->query("SELECT * FROM competitions ORDER BY created_at DESC")->fetchAll();
 } catch (Exception $e) {
     $competitions = [];
+}
+
+// 4b. Current Active Hero Banner (Fail-Safe)
+$currentBanner = null;
+try {
+    $currentBanner = $pdo->query("SELECT * FROM banner WHERE is_active = 1 ORDER BY id DESC LIMIT 1")->fetch();
+} catch (Exception $e) {
+    $currentBanner = null;
 }
 
 // 5. Digital Books Catalog (Fail-Safe)
@@ -864,6 +873,22 @@ $currency = Settings::getCurrencySymbol();
                 <div class="col-lg-6">
                     <div class="content-panel">
                         <h5 class="fw-bold text-white mb-3"><i class="fas fa-image text-warning me-2"></i> Update Hero Banner</h5>
+                        
+                        <?php if (!empty($currentBanner['image_path'])): ?>
+                            <div class="mb-3 p-3 rounded bg-dark border border-secondary text-center">
+                                <div class="text-secondary small mb-2 fw-semibold text-uppercase d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-check-circle text-success me-1"></i> Live Active Hero Banner</span>
+                                    <span class="badge bg-success">Active</span>
+                                </div>
+                                <img src="<?= e($currentBanner['image_path']) ?>" alt="Current Banner" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 8px; background: rgba(0,0,0,0.5);">
+                                <?php if (!empty($currentBanner['link_url'])): ?>
+                                    <div class="small text-secondary mt-1 text-truncate">
+                                        <i class="fas fa-link me-1"></i> <?= e($currentBanner['link_url']) ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+
                         <form method="POST" enctype="multipart/form-data">
                             <?= Security::csrfField() ?>
                             <input type="hidden" name="admin_action" value="upload_banner">
@@ -871,10 +896,15 @@ $currency = Settings::getCurrencySymbol();
                             <div class="mb-3">
                                 <label class="form-label text-light small fw-semibold">Select New Banner Image</label>
                                 <input type="file" name="banner_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white" required>
-                                <div class="form-text text-secondary" style="font-size: 11px;">Recommended size: 1200x500px (JPG, PNG, WEBP)</div>
+                                <div class="form-text text-secondary" style="font-size: 11px;">Supports all formats and dimensions (Landscape, 16:9, or Event Flyers). Displays 100% in full without cropping. Max: 10MB.</div>
                             </div>
 
-                            <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-upload me-1"></i> Upload Banner</button>
+                            <div class="mb-3">
+                                <label class="form-label text-light small fw-semibold">Optional Click Destination URL</label>
+                                <input type="url" name="link_url" class="form-control bg-dark border-secondary text-white" placeholder="https://... (Leave blank if none)">
+                            </div>
+
+                            <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-upload me-1"></i> Upload & Set Live Banner</button>
                         </form>
                     </div>
                 </div>

@@ -14,9 +14,10 @@ $siteTitle = Settings::get('site_title', 'Crown Night Star');
 $siteTagline = Settings::get('site_tagline', 'Most Anticipated Online Contest');
 
 // 2. Fetch Latest Active Hero Banner
-$bannerStmt = $pdo->query("SELECT image_path FROM banner WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+$bannerStmt = $pdo->query("SELECT * FROM banner WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
 $bannerRow = $bannerStmt->fetch();
 $bannerImage = $bannerRow['image_path'] ?? 'assets/images/banner.jpg';
+$bannerLink = $bannerRow['link_url'] ?? null;
 
 // 3. Fetch Featured Competitions
 $compStmt = $pdo->query("SELECT * FROM competitions WHERE status = 'active' ORDER BY created_at DESC");
@@ -122,18 +123,28 @@ $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
             letter-spacing: 1px;
         }
         .banner-wrapper {
-            max-width: 960px;
+            max-width: 1200px;
+            width: 100%;
             margin: 0 auto 50px;
             border-radius: 20px;
             overflow: hidden;
-            border: 1px solid rgba(255, 215, 0, 0.2);
+            border: 1px solid rgba(255, 215, 0, 0.25);
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            background: rgba(14, 11, 30, 0.6);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        .banner-wrapper:hover {
+            border-color: rgba(255, 215, 0, 0.45);
+            box-shadow: 0 25px 60px rgba(255, 215, 0, 0.15);
         }
         .banner-wrapper img {
             width: 100%;
-            max-height: 420px;
-            object-fit: cover;
+            height: auto;
+            max-height: none;
+            object-fit: contain;
             display: block;
+            margin: 0 auto;
         }
         .stage-card {
             background: rgba(22, 17, 44, 0.8);
@@ -293,7 +304,13 @@ $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
         <!-- Banner Image -->
         <?php if (!empty($bannerImage)): ?>
             <div class="banner-wrapper">
-                <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Banner">
+                <?php if (!empty($bannerLink)): ?>
+                    <a href="<?= e($bannerLink) ?>" target="_blank" rel="noopener">
+                        <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Official Banner">
+                    </a>
+                <?php else: ?>
+                    <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Official Banner">
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>
