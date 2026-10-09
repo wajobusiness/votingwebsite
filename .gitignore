@@ -3,3 +3,8 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+.env
+Contest Voting Script/.env
+uploads/books/*
+!uploads/books/.gitkeep
+
