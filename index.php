@@ -306,10 +306,10 @@ $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
             <div class="banner-wrapper">
                 <?php if (!empty($bannerLink)): ?>
                     <a href="<?= e($bannerLink) ?>" target="_blank" rel="noopener">
-                        <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Official Banner">
+                        <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Official Banner" style="width: 100%; height: auto; max-height: none; object-fit: contain; display: block;">
                     </a>
                 <?php else: ?>
-                    <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Official Banner">
+                    <img src="<?= e($bannerImage) ?>" alt="<?= e($siteTitle) ?> Official Banner" style="width: 100%; height: auto; max-height: none; object-fit: contain; display: block;">
                 <?php endif; ?>
             </div>
         <?php endif; ?>
