@@ -154,15 +154,38 @@ INSERT INTO `current_stage` (`id`, `stage_name`) VALUES (1, 'Stage One')
 ON DUPLICATE KEY UPDATE `stage_name`=VALUES(`stage_name`);
 
 -- --------------------------------------------------------
--- Table: contests (Maintained for backward compatibility)
+-- Table: contest_battles (Head-to-Head Contest Battles & Showdowns)
 -- --------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `contests` (
+CREATE TABLE IF NOT EXISTS `contest_battles` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
-  `name` VARCHAR(255) NOT NULL,
-  `start_date` DATETIME DEFAULT NULL,
-  `end_date` DATETIME DEFAULT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `category` VARCHAR(100) NOT NULL DEFAULT 'Talent Battle',
   `description` TEXT DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  `contestant_one_name` VARCHAR(255) NOT NULL,
+  `contestant_one_image` VARCHAR(255) NOT NULL,
+  `contestant_two_name` VARCHAR(255) NOT NULL,
+  `contestant_two_image` VARCHAR(255) NOT NULL,
+  `banner_image` VARCHAR(255) DEFAULT NULL,
+  `battle_date` DATE NOT NULL,
+  `battle_time` VARCHAR(50) NOT NULL,
+  `venue_type` ENUM('online', 'physical') NOT NULL DEFAULT 'online',
+  `platform` VARCHAR(100) DEFAULT 'Instagram Live',
+  `live_url` VARCHAR(500) DEFAULT NULL,
+  `venue_name` VARCHAR(255) DEFAULT NULL,
+  `venue_address` VARCHAR(255) DEFAULT NULL,
+  `venue_city` VARCHAR(100) DEFAULT NULL,
+  `venue_state` VARCHAR(100) DEFAULT NULL,
+  `maps_url` VARCHAR(500) DEFAULT NULL,
+  `status` ENUM('upcoming', 'live', 'ended', 'cancelled') NOT NULL DEFAULT 'upcoming',
+  `is_featured` TINYINT(1) NOT NULL DEFAULT 0,
+  `is_published` TINYINT(1) NOT NULL DEFAULT 1,
+  `display_order` INT(11) NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_battles_published` (`is_published`),
+  KEY `idx_battles_status` (`status`),
+  KEY `idx_battles_order` (`display_order` ASC, `battle_date` ASC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

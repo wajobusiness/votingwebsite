@@ -50,6 +50,9 @@ $buyerDefaultName = $currentUser['full_name'] ?? '';
 $buyerDefaultEmail = $currentUser['email'] ?? '';
 $buyerDefaultPhone = $currentUser['phone_number'] ?? '';
 $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
+
+// 6. Fetch Published Contest Battles
+$publishedBattles = BattlesService::getPublishedBattles();
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
@@ -239,6 +242,261 @@ $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
             color: #fff;
             outline: none;
         }
+        /* Battle Cards & Matchup Arena */
+        .battle-card {
+            background: rgba(22, 17, 44, 0.85);
+            border: 1px solid rgba(255, 215, 0, 0.22);
+            border-radius: 20px;
+            overflow: hidden;
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .battle-card:hover {
+            transform: translateY(-8px);
+            border-color: rgba(255, 107, 0, 0.6);
+            box-shadow: 0 20px 45px rgba(255, 69, 0, 0.25);
+        }
+        .battle-card.card-live {
+            border-color: rgba(255, 59, 48, 0.6);
+            box-shadow: 0 0 35px rgba(255, 59, 48, 0.25);
+        }
+        .battle-banner-wrap {
+            height: 130px;
+            position: relative;
+            background: #15102a;
+            overflow: hidden;
+        }
+        .battle-banner-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.55;
+            transition: transform 0.4s ease;
+        }
+        .battle-card:hover .battle-banner-wrap img {
+            transform: scale(1.08);
+            opacity: 0.75;
+        }
+        .battle-category-pill {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(14, 11, 30, 0.85);
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            color: #ffd700;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 50px;
+            text-transform: uppercase;
+            backdrop-filter: blur(8px);
+        }
+        .battle-status-wrap {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .battle-badge-live {
+            background: linear-gradient(135deg, #ff2a2a, #ff5e3a);
+            color: #fff;
+            font-weight: 800;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 50px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 0 15px rgba(255, 42, 42, 0.6);
+            animation: pulse-live 1.8s infinite;
+        }
+        @keyframes pulse-live {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+        }
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            background: #fff;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px #fff;
+        }
+        .battle-badge-upcoming {
+            background: rgba(255, 215, 0, 0.15);
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            color: #ffd700;
+            font-weight: 800;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 50px;
+        }
+        .battle-badge-ended {
+            background: rgba(100, 116, 139, 0.25);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            color: #94a3b8;
+            font-weight: 700;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 50px;
+        }
+        .battle-badge-cancelled {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+            font-weight: 700;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 50px;
+        }
+        .matchup-arena {
+            padding: 16px 14px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            margin-top: -42px;
+            z-index: 2;
+        }
+        .contestant-fighter {
+            flex: 1;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .fighter-avatar-wrap {
+            width: 76px;
+            height: 76px;
+            border-radius: 50%;
+            border: 3px solid #ffd700;
+            box-shadow: 0 0 18px rgba(255, 215, 0, 0.35);
+            overflow: hidden;
+            background: #090714;
+            margin-bottom: 6px;
+            transition: transform 0.3s ease;
+        }
+        .battle-card:hover .fighter-avatar-wrap {
+            transform: scale(1.08);
+            border-color: #ff6b00;
+        }
+        .fighter-avatar-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .fighter-name {
+            font-weight: 800;
+            font-size: 13px;
+            color: #ffffff;
+            margin-bottom: 2px;
+            max-width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .fighter-tag {
+            font-size: 10px;
+            color: #ffd700;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .vs-badge-epic {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff4500, #ff8c00);
+            color: #fff;
+            font-weight: 900;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.7);
+            border: 2px solid #fff;
+            flex-shrink: 0;
+            margin: 0 6px;
+            z-index: 3;
+        }
+        .battle-content {
+            padding: 0 16px 16px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .battle-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 6px;
+            line-height: 1.3;
+        }
+        .battle-info-row {
+            background: rgba(14, 11, 30, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 9px 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+        .battle-info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #cbd5e1;
+            margin-bottom: 4px;
+        }
+        .battle-info-item:last-child {
+            margin-bottom: 0;
+        }
+        .btn-battle-action {
+            background: linear-gradient(135deg, #ff4500 0%, #ff8c00 100%);
+            color: #fff;
+            font-weight: 800;
+            border-radius: 10px;
+            border: none;
+            padding: 10px 14px;
+            font-size: 13px;
+            text-decoration: none;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 16px rgba(255, 69, 0, 0.35);
+        }
+        .btn-battle-action:hover {
+            background: linear-gradient(135deg, #ff5714 0%, #ffa01a 100%);
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        .btn-battle-location {
+            background: linear-gradient(135deg, #ffd700 0%, #d4af37 100%);
+            color: #0d1117;
+            font-weight: 800;
+            border-radius: 10px;
+            border: none;
+            padding: 10px 14px;
+            font-size: 13px;
+            text-decoration: none;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 16px rgba(255, 215, 0, 0.25);
+        }
+        .btn-battle-location:hover {
+            background: linear-gradient(135deg, #ffe033 0%, #e5bd3b 100%);
+            color: #0d1117;
+            transform: translateY(-2px);
+        }
         footer {
             background: #070510;
             border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -263,6 +521,7 @@ $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
             <ul class="navbar-nav mx-auto mb-2 mb-lg-0 gap-3">
                 <li class="nav-item"><a class="nav-link text-white fw-semibold" href="index.php">Home</a></li>
                 <li class="nav-item"><a class="nav-link text-light" href="#contestants">Contestants</a></li>
+                <li class="nav-item"><a class="nav-link text-danger fw-semibold" href="#battles"><i class="fas fa-bolt me-1"></i> Battles</a></li>
                 <li class="nav-item"><a class="nav-link text-warning fw-semibold" href="bookstore.php"><i class="fas fa-book-open me-1"></i> Bookstore</a></li>
                 <li class="nav-item"><a class="nav-link text-light" href="about-us.php">About Contest</a></li>
                 <li class="nav-item"><a class="nav-link text-light" href="terms.php">Terms & Rules</a></li>
@@ -495,6 +754,136 @@ $buyerUserId = $currentUser ? (int)$currentUser['id'] : 0;
                     </button>
                 </div>
             <?php endif; ?>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
+
+<!-- 🔥 Contest Battles Section -->
+<?php if (!empty($publishedBattles)): ?>
+<section class="py-5" id="battles" style="background: radial-gradient(circle at 50% 10%, rgba(255, 69, 0, 0.12), transparent 60%), rgba(10, 8, 20, 0.9); border-top: 1px solid rgba(255, 69, 0, 0.25); border-bottom: 1px solid rgba(255, 215, 0, 0.15);">
+    <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-3">
+            <div>
+                <span class="badge bg-danger px-3 py-2 fw-bold text-uppercase mb-2" style="letter-spacing: 0.5px;">
+                    <i class="fas fa-fire me-1"></i> Live Arena & Showdowns
+                </span>
+                <h2 class="fw-bold text-white mb-1">🔥 Contest Battles</h2>
+                <p class="text-secondary small mb-0">Official head-to-head rap battles, dance clashes, and live talent showdowns. Join the stream online or catch them live!</p>
+            </div>
+            <div>
+                <a href="battles.php" class="btn btn-outline-danger btn-sm px-3 fw-bold">
+                    View All Battles (<?= count($publishedBattles) ?>) <i class="fas fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <?php foreach ($publishedBattles as $b): ?>
+                <?php
+                    $isLive = ($b['status'] === 'live');
+                    $isEnded = ($b['status'] === 'ended');
+                    $isCancelled = ($b['status'] === 'cancelled');
+                    $bannerImg = !empty($b['banner_image']) ? $b['banner_image'] : 'assets2/images/login-bg.jpg';
+                    $dateTimeStr = BattlesService::formatBattleDateTime($b['battle_date'], $b['battle_time']);
+                ?>
+                <div class="col-md-6 col-lg-4">
+                    <div class="battle-card <?= $isLive ? 'card-live' : '' ?>">
+                        <!-- Top Banner Image -->
+                        <div class="battle-banner-wrap">
+                            <img src="<?= e($bannerImg) ?>" alt="<?= e($b['title']) ?>" loading="lazy">
+                            <span class="battle-category-pill"><?= e($b['category']) ?></span>
+                            <div class="battle-status-wrap">
+                                <?= BattlesService::getStatusBadgeHtml($b['status']) ?>
+                            </div>
+                        </div>
+
+                        <!-- Matchup Arena -->
+                        <div class="matchup-arena">
+                            <div class="contestant-fighter">
+                                <div class="fighter-avatar-wrap">
+                                    <img src="<?= e($b['contestant_one_image']) ?>" alt="<?= e($b['contestant_one_name']) ?>" loading="lazy">
+                                </div>
+                                <div class="fighter-name" title="<?= e($b['contestant_one_name']) ?>"><?= e($b['contestant_one_name']) ?></div>
+                                <span class="fighter-tag">Contestant 1</span>
+                            </div>
+
+                            <div class="vs-badge-epic">VS</div>
+
+                            <div class="contestant-fighter">
+                                <div class="fighter-avatar-wrap">
+                                    <img src="<?= e($b['contestant_two_image']) ?>" alt="<?= e($b['contestant_two_name']) ?>" loading="lazy">
+                                </div>
+                                <div class="fighter-name" title="<?= e($b['contestant_two_name']) ?>"><?= e($b['contestant_two_name']) ?></div>
+                                <span class="fighter-tag">Contestant 2</span>
+                            </div>
+                        </div>
+
+                        <!-- Battle Details & Metadata -->
+                        <div class="battle-content">
+                            <div>
+                                <h5 class="battle-title text-truncate-2" title="<?= e($b['title']) ?>"><?= e($b['title']) ?></h5>
+                                <?php if (!empty($b['description'])): ?>
+                                    <p class="text-secondary small mb-2" style="font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;"><?= e($b['description']) ?></p>
+                                <?php endif; ?>
+
+                                <div class="battle-info-row">
+                                    <div class="battle-info-item">
+                                        <i class="far fa-calendar-alt text-warning"></i>
+                                        <span><strong>Date:</strong> <?= e($dateTimeStr) ?></span>
+                                    </div>
+
+                                    <?php if ($b['venue_type'] === 'online'): ?>
+                                        <div class="battle-info-item">
+                                            <?= BattlesService::getPlatformIconHtml($b['platform']) ?>
+                                            <span><strong>Venue:</strong> <?= e($b['platform'] ?? 'Online Livestream') ?></span>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="battle-info-item">
+                                            <i class="fas fa-map-marker-alt text-danger"></i>
+                                            <span class="text-truncate" title="<?= e(($b['venue_name'] ?? '') . ', ' . ($b['venue_city'] ?? '')) ?>">
+                                                <strong>Venue:</strong> <?= e($b['venue_name'] ?? 'Physical Stage') ?><?= !empty($b['venue_city']) ? ', ' . e($b['venue_city']) : '' ?>
+                                            </span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <!-- Action CTA -->
+                            <div>
+                                <?php if ($b['venue_type'] === 'online'): ?>
+                                    <?php if (!empty($b['live_url']) && !$isEnded && !$isCancelled): ?>
+                                        <a href="<?= e($b['live_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-battle-action">
+                                            <?= BattlesService::getPlatformIconHtml($b['platform']) ?>
+                                            <?= $isLive ? 'Watch Live Stream' : 'Watch Battle on ' . e($b['platform']) ?>
+                                            <i class="fas fa-external-link-alt ms-1 small"></i>
+                                        </a>
+                                    <?php elseif ($isEnded): ?>
+                                        <div class="text-center p-2 rounded bg-dark border border-secondary text-secondary small fw-bold"><i class="fas fa-flag-checkered me-1"></i> Battle Concluded</div>
+                                    <?php else: ?>
+                                        <a href="https://instagram.com/crownnightstar" target="_blank" rel="noopener" class="btn-battle-action">
+                                            <i class="fas fa-broadcast-tower me-1"></i> Watch Official Live
+                                        </a>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <?php if (!empty($b['maps_url']) && !$isEnded && !$isCancelled): ?>
+                                        <a href="<?= e($b['maps_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-battle-location">
+                                            <i class="fas fa-map-marked-alt me-1"></i> View Location & Directions
+                                            <i class="fas fa-external-link-alt ms-1 small"></i>
+                                        </a>
+                                    <?php elseif (!$isEnded && !$isCancelled): ?>
+                                        <a href="battles.php" class="btn-battle-location">
+                                            <i class="fas fa-building me-1"></i> View Location Details
+                                        </a>
+                                    <?php else: ?>
+                                        <div class="text-center p-2 rounded bg-dark border border-secondary text-secondary small fw-bold"><i class="fas fa-flag-checkered me-1"></i> Battle Concluded</div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
         </div>
     </div>
 </section>

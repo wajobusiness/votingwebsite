@@ -311,6 +311,191 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
 
+            // ==================== CONTEST BATTLES ACTIONS ====================
+            case 'add_battle':
+                $title = trim($_POST['title'] ?? '');
+                $category = trim($_POST['category'] ?? 'Talent Battle');
+                $description = trim($_POST['description'] ?? '');
+                $c1Name = trim($_POST['contestant_one_name'] ?? '');
+                $c2Name = trim($_POST['contestant_two_name'] ?? '');
+                $battleDate = trim($_POST['battle_date'] ?? date('Y-m-d'));
+                $battleTime = trim($_POST['battle_time'] ?? '08:00 PM');
+                $venueType = in_array($_POST['venue_type'] ?? '', ['online', 'physical'], true) ? $_POST['venue_type'] : 'online';
+                $platform = trim($_POST['platform'] ?? 'Instagram Live');
+                $liveUrl = trim($_POST['live_url'] ?? '');
+                $venueName = trim($_POST['venue_name'] ?? '');
+                $venueAddress = trim($_POST['venue_address'] ?? '');
+                $venueCity = trim($_POST['venue_city'] ?? '');
+                $venueState = trim($_POST['venue_state'] ?? '');
+                $mapsUrl = trim($_POST['maps_url'] ?? '');
+                $status = in_array($_POST['status'] ?? '', ['upcoming', 'live', 'ended', 'cancelled'], true) ? $_POST['status'] : 'upcoming';
+                $isFeatured = isset($_POST['is_featured']) ? 1 : 0;
+                $isPublished = isset($_POST['is_published']) ? 1 : 0;
+                $displayOrder = (int)($_POST['display_order'] ?? 0);
+
+                if (empty($title) || empty($c1Name) || empty($c2Name)) {
+                    $_SESSION['flash_error'] = "Battle title and both contestant names are required.";
+                    break;
+                }
+
+                $c1Image = 'uploads/default_avatar.png';
+                if (isset($_FILES['contestant_one_image']) && $_FILES['contestant_one_image']['error'] === UPLOAD_ERR_OK) {
+                    $upload1 = Security::handleFileUpload($_FILES['contestant_one_image'], __DIR__ . '/uploads/battles/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($upload1['success']) {
+                        $c1Image = 'uploads/battles/' . $upload1['filename'];
+                    }
+                }
+
+                $c2Image = 'uploads/default_avatar.png';
+                if (isset($_FILES['contestant_two_image']) && $_FILES['contestant_two_image']['error'] === UPLOAD_ERR_OK) {
+                    $upload2 = Security::handleFileUpload($_FILES['contestant_two_image'], __DIR__ . '/uploads/battles/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($upload2['success']) {
+                        $c2Image = 'uploads/battles/' . $upload2['filename'];
+                    }
+                }
+
+                $bannerImage = null;
+                if (isset($_FILES['banner_image']) && $_FILES['banner_image']['error'] === UPLOAD_ERR_OK) {
+                    $uploadBanner = Security::handleFileUpload($_FILES['banner_image'], __DIR__ . '/uploads/battles/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($uploadBanner['success']) {
+                        $bannerImage = 'uploads/battles/' . $uploadBanner['filename'];
+                    }
+                }
+
+                $res = BattlesService::createBattle([
+                    'title'                => $title,
+                    'category'             => $category,
+                    'description'          => $description,
+                    'contestant_one_name'  => $c1Name,
+                    'contestant_one_image' => $c1Image,
+                    'contestant_two_name'  => $c2Name,
+                    'contestant_two_image' => $c2Image,
+                    'banner_image'         => $bannerImage,
+                    'battle_date'          => $battleDate,
+                    'battle_time'          => $battleTime,
+                    'venue_type'           => $venueType,
+                    'platform'             => $platform,
+                    'live_url'             => $liveUrl,
+                    'venue_name'           => $venueName,
+                    'venue_address'        => $venueAddress,
+                    'venue_city'           => $venueCity,
+                    'venue_state'          => $venueState,
+                    'maps_url'             => $mapsUrl,
+                    'status'               => $status,
+                    'is_featured'          => $isFeatured,
+                    'is_published'         => $isPublished,
+                    'display_order'        => $displayOrder
+                ]);
+
+                if ($res['success']) {
+                    $_SESSION['flash_success'] = "Contest Battle created successfully!";
+                } else {
+                    $_SESSION['flash_error'] = "Failed to create battle: " . ($res['error'] ?? 'Unknown error');
+                }
+                break;
+
+            case 'update_battle':
+                $battleId = filter_input(INPUT_POST, 'battle_id', FILTER_VALIDATE_INT);
+                if (!$battleId) {
+                    $_SESSION['flash_error'] = "Invalid battle ID.";
+                    break;
+                }
+
+                $existingBattle = BattlesService::getBattleById($battleId);
+                if (!$existingBattle) {
+                    $_SESSION['flash_error'] = "Battle not found.";
+                    break;
+                }
+
+                $c1Image = $existingBattle['contestant_one_image'];
+                if (isset($_FILES['contestant_one_image']) && $_FILES['contestant_one_image']['error'] === UPLOAD_ERR_OK) {
+                    $upload1 = Security::handleFileUpload($_FILES['contestant_one_image'], __DIR__ . '/uploads/battles/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($upload1['success']) {
+                        $c1Image = 'uploads/battles/' . $upload1['filename'];
+                    }
+                }
+
+                $c2Image = $existingBattle['contestant_two_image'];
+                if (isset($_FILES['contestant_two_image']) && $_FILES['contestant_two_image']['error'] === UPLOAD_ERR_OK) {
+                    $upload2 = Security::handleFileUpload($_FILES['contestant_two_image'], __DIR__ . '/uploads/battles/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($upload2['success']) {
+                        $c2Image = 'uploads/battles/' . $upload2['filename'];
+                    }
+                }
+
+                $bannerImage = $existingBattle['banner_image'];
+                if (isset($_FILES['banner_image']) && $_FILES['banner_image']['error'] === UPLOAD_ERR_OK) {
+                    $uploadBanner = Security::handleFileUpload($_FILES['banner_image'], __DIR__ . '/uploads/battles/', ['jpg', 'jpeg', 'png', 'webp'], 10);
+                    if ($uploadBanner['success']) {
+                        $bannerImage = 'uploads/battles/' . $uploadBanner['filename'];
+                    }
+                }
+
+                $res = BattlesService::updateBattle($battleId, [
+                    'title'                => trim($_POST['title'] ?? ''),
+                    'category'             => trim($_POST['category'] ?? 'Talent Battle'),
+                    'description'          => trim($_POST['description'] ?? ''),
+                    'contestant_one_name'  => trim($_POST['contestant_one_name'] ?? ''),
+                    'contestant_one_image' => $c1Image,
+                    'contestant_two_name'  => trim($_POST['contestant_two_name'] ?? ''),
+                    'contestant_two_image' => $c2Image,
+                    'banner_image'         => $bannerImage,
+                    'battle_date'          => trim($_POST['battle_date'] ?? ''),
+                    'battle_time'          => trim($_POST['battle_time'] ?? ''),
+                    'venue_type'           => in_array($_POST['venue_type'] ?? '', ['online', 'physical'], true) ? $_POST['venue_type'] : 'online',
+                    'platform'             => trim($_POST['platform'] ?? ''),
+                    'live_url'             => trim($_POST['live_url'] ?? ''),
+                    'venue_name'           => trim($_POST['venue_name'] ?? ''),
+                    'venue_address'        => trim($_POST['venue_address'] ?? ''),
+                    'venue_city'           => trim($_POST['venue_city'] ?? ''),
+                    'venue_state'          => trim($_POST['venue_state'] ?? ''),
+                    'maps_url'             => trim($_POST['maps_url'] ?? ''),
+                    'status'               => in_array($_POST['status'] ?? '', ['upcoming', 'live', 'ended', 'cancelled'], true) ? $_POST['status'] : 'upcoming',
+                    'is_featured'          => isset($_POST['is_featured']) ? 1 : 0,
+                    'is_published'         => isset($_POST['is_published']) ? 1 : 0,
+                    'display_order'        => (int)($_POST['display_order'] ?? 0)
+                ]);
+
+                if ($res['success']) {
+                    $_SESSION['flash_success'] = "Battle details updated successfully!";
+                } else {
+                    $_SESSION['flash_error'] = "Failed to update battle: " . ($res['error'] ?? 'Unknown error');
+                }
+                break;
+
+            case 'delete_battle':
+                $battleId = filter_input(INPUT_POST, 'battle_id', FILTER_VALIDATE_INT);
+                if ($battleId) {
+                    BattlesService::deleteBattle($battleId);
+                    $_SESSION['flash_success'] = "Battle removed successfully.";
+                }
+                break;
+
+            case 'toggle_battle_publish':
+                $battleId = filter_input(INPUT_POST, 'battle_id', FILTER_VALIDATE_INT);
+                if ($battleId) {
+                    BattlesService::togglePublish($battleId);
+                    $_SESSION['flash_success'] = "Battle publish status updated.";
+                }
+                break;
+
+            case 'toggle_battle_featured':
+                $battleId = filter_input(INPUT_POST, 'battle_id', FILTER_VALIDATE_INT);
+                if ($battleId) {
+                    BattlesService::toggleFeatured($battleId);
+                    $_SESSION['flash_success'] = "Battle featured status updated.";
+                }
+                break;
+
+            case 'reorder_battle':
+                $battleId = filter_input(INPUT_POST, 'battle_id', FILTER_VALIDATE_INT);
+                $order = filter_input(INPUT_POST, 'display_order', FILTER_VALIDATE_INT);
+                if ($battleId && $order !== false) {
+                    BattlesService::updateDisplayOrder($battleId, $order);
+                    $_SESSION['flash_success'] = "Display order updated.";
+                }
+                break;
+
             default:
                 $_SESSION['flash_error'] = "Unrecognized administrative action.";
                 break;
@@ -419,6 +604,15 @@ try {
 } catch (Exception $e) {
     $bookPurchases = [];
     $totalBookSales = 0.0;
+}
+
+// 7. Contest Battles (Fail-Safe)
+$battles = [];
+try {
+    $battles = BattlesService::getAllBattles();
+} catch (Exception $e) {
+    error_log("Battles query error: " . $e->getMessage());
+    $battles = [];
 }
 
 $currentStage = Settings::getCurrentStage();
@@ -612,6 +806,11 @@ $currency = Settings::getCurrencySymbol();
         <li class="nav-item">
             <button class="nav-link" id="bookstore-tab" data-bs-toggle="tab" data-bs-target="#bookstoreTab">
                 <i class="fas fa-book-open me-1"></i> Digital Bookstore (<?= count($books) ?>)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="battles-tab" data-bs-toggle="tab" data-bs-target="#battlesTab">
+                <i class="fas fa-bolt text-danger me-1"></i> Contest Battles (<?= count($battles) ?>)
             </button>
         </li>
     </ul>
@@ -1163,6 +1362,208 @@ $currency = Settings::getCurrencySymbol();
             </div>
         </div>
 
+        <!-- ==================== TAB 6: CONTEST BATTLES ==================== -->
+        <div class="tab-pane fade" id="battlesTab">
+            <?php
+                $liveBattlesCount = count(array_filter($battles, fn($b) => $b['status'] === 'live'));
+                $upcomingBattlesCount = count(array_filter($battles, fn($b) => $b['status'] === 'upcoming'));
+                $endedBattlesCount = count(array_filter($battles, fn($b) => $b['status'] === 'ended'));
+            ?>
+            <!-- Stats Metric Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="text-secondary small fw-bold text-uppercase mb-1">Total Battles</div>
+                        <div class="stat-value text-white"><?= count($battles) ?></div>
+                        <div class="text-secondary small mt-1">Scheduled & archived</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="text-secondary small fw-bold text-uppercase mb-1">Live Now</div>
+                        <div class="stat-value text-danger"><?= $liveBattlesCount ?></div>
+                        <div class="text-secondary small mt-1">Actively streaming</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="text-secondary small fw-bold text-uppercase mb-1">Upcoming Showdowns</div>
+                        <div class="stat-value text-warning"><?= $upcomingBattlesCount ?></div>
+                        <div class="text-secondary small mt-1">On schedule</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="text-secondary small fw-bold text-uppercase mb-1">Concluded Battles</div>
+                        <div class="stat-value text-info"><?= $endedBattlesCount ?></div>
+                        <div class="text-secondary small mt-1">Completed matches</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Battles Management Panel -->
+            <div class="content-panel">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                    <div>
+                        <h5 class="fw-bold text-white mb-1"><i class="fas fa-bolt text-danger me-2"></i> Contest Battles Arena</h5>
+                        <p class="text-secondary small mb-0">Create, schedule, and manage rap battles, dance clashes, and live talent showdowns.</p>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-danger btn-sm fw-bold px-3 py-2" data-bs-toggle="modal" data-bs-target="#addBattleModal">
+                            <i class="fas fa-plus-circle me-1"></i> Create New Battle
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-custom">
+                        <thead>
+                            <tr>
+                                <th style="width: 70px;">Order</th>
+                                <th>Matchup (Contestant 1 VS 2)</th>
+                                <th>Battle Details</th>
+                                <th>Schedule</th>
+                                <th>Venue</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($battles)): ?>
+                                <tr>
+                                    <td colspan="7" class="text-center py-5 text-secondary">
+                                        <i class="fas fa-bolt fa-3x mb-3 text-secondary opacity-50 d-block"></i>
+                                        <h5>No contest battles created yet.</h5>
+                                        <p class="small mb-3">Create your first head-to-head showdown to display on the homepage.</p>
+                                        <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#addBattleModal">
+                                            <i class="fas fa-plus me-1"></i> Add First Battle
+                                        </button>
+                                    </td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($battles as $bat): ?>
+                                    <tr>
+                                        <!-- Display Order Form -->
+                                        <td>
+                                            <form method="POST" class="d-flex align-items-center gap-1">
+                                                <?= Security::csrfField() ?>
+                                                <input type="hidden" name="admin_action" value="reorder_battle">
+                                                <input type="hidden" name="battle_id" value="<?= (int)$bat['id'] ?>">
+                                                <input type="number" name="display_order" value="<?= (int)$bat['display_order'] ?>" class="form-control form-control-sm bg-dark border-secondary text-white text-center px-1" style="width: 48px;" onchange="this.form.submit()" title="Change order and press Enter">
+                                            </form>
+                                        </td>
+
+                                        <!-- Matchup Avatars -->
+                                        <td>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="text-center">
+                                                    <img src="<?= e($bat['contestant_one_image']) ?>" width="40" height="40" class="rounded-circle border border-warning object-fit-cover shadow" alt="<?= e($bat['contestant_one_name']) ?>" title="<?= e($bat['contestant_one_name']) ?>">
+                                                    <div class="small fw-bold text-white text-truncate mt-1" style="max-width: 80px; font-size: 11px;"><?= e($bat['contestant_one_name']) ?></div>
+                                                </div>
+                                                <span class="badge bg-danger rounded-pill px-2 py-1 small fw-bold" style="font-size: 10px;">VS</span>
+                                                <div class="text-center">
+                                                    <img src="<?= e($bat['contestant_two_image']) ?>" width="40" height="40" class="rounded-circle border border-warning object-fit-cover shadow" alt="<?= e($bat['contestant_two_name']) ?>" title="<?= e($bat['contestant_two_name']) ?>">
+                                                    <div class="small fw-bold text-white text-truncate mt-1" style="max-width: 80px; font-size: 11px;"><?= e($bat['contestant_two_name']) ?></div>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <!-- Battle Details -->
+                                        <td>
+                                            <div class="fw-bold text-white small mb-1"><?= e($bat['title']) ?></div>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <span class="badge bg-dark border border-secondary text-warning" style="font-size: 10px;"><?= e($bat['category']) ?></span>
+                                                <?php if (!empty($bat['is_featured'])): ?>
+                                                    <span class="badge bg-warning text-dark" style="font-size: 9px;"><i class="fas fa-star me-1"></i>FEATURED</span>
+                                                <?php endif; ?>
+                                                <?php if (empty($bat['is_published'])): ?>
+                                                    <span class="badge bg-secondary text-light" style="font-size: 9px;">HIDDEN</span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+
+                                        <!-- Schedule -->
+                                        <td>
+                                            <div class="small text-white fw-semibold"><?= date('M d, Y', strtotime($bat['battle_date'])) ?></div>
+                                            <div class="small text-secondary"><?= e($bat['battle_time']) ?></div>
+                                        </td>
+
+                                        <!-- Venue -->
+                                        <td>
+                                            <?php if ($bat['venue_type'] === 'online'): ?>
+                                                <div class="small text-white fw-bold">
+                                                    <?= BattlesService::getPlatformIconHtml($bat['platform']) ?>
+                                                    <?= e($bat['platform'] ?? 'Online Live') ?>
+                                                </div>
+                                                <?php if (!empty($bat['live_url'])): ?>
+                                                    <a href="<?= e($bat['live_url']) ?>" target="_blank" class="small text-info text-truncate d-inline-block" style="max-width: 140px;" title="<?= e($bat['live_url']) ?>">
+                                                        <i class="fas fa-link me-1"></i> Link
+                                                    </a>
+                                                <?php endif; ?>
+                                            <?php else: ?>
+                                                <div class="small text-white fw-bold">
+                                                    <i class="fas fa-map-marker-alt text-danger me-1"></i>
+                                                    <?= e($bat['venue_name'] ?? 'Physical Venue') ?>
+                                                </div>
+                                                <div class="small text-secondary text-truncate" style="max-width: 140px;">
+                                                    <?= e($bat['venue_city'] ?? '') ?><?= !empty($bat['venue_state']) ? ', ' . e($bat['venue_state']) : '' ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+
+                                        <!-- Status -->
+                                        <td>
+                                            <?= BattlesService::getStatusBadgeHtml($bat['status']) ?>
+                                        </td>
+
+                                        <!-- Actions -->
+                                        <td class="text-end">
+                                            <div class="d-inline-flex gap-1">
+                                                <!-- Toggle Featured -->
+                                                <form method="POST" class="d-inline">
+                                                    <?= Security::csrfField() ?>
+                                                    <input type="hidden" name="admin_action" value="toggle_battle_featured">
+                                                    <input type="hidden" name="battle_id" value="<?= (int)$bat['id'] ?>">
+                                                    <button type="submit" class="btn btn-sm <?= !empty($bat['is_featured']) ? 'btn-warning text-dark' : 'btn-outline-secondary' ?>" title="<?= !empty($bat['is_featured']) ? 'Unfeature' : 'Mark as Featured' ?>">
+                                                        <i class="fas fa-star"></i>
+                                                    </button>
+                                                </form>
+
+                                                <!-- Toggle Published -->
+                                                <form method="POST" class="d-inline">
+                                                    <?= Security::csrfField() ?>
+                                                    <input type="hidden" name="admin_action" value="toggle_battle_publish">
+                                                    <input type="hidden" name="battle_id" value="<?= (int)$bat['id'] ?>">
+                                                    <button type="submit" class="btn btn-sm <?= !empty($bat['is_published']) ? 'btn-outline-success' : 'btn-outline-secondary' ?>" title="<?= !empty($bat['is_published']) ? 'Hide from public' : 'Publish live' ?>">
+                                                        <i class="fas <?= !empty($bat['is_published']) ? 'fa-eye' : 'fa-eye-slash' ?>"></i>
+                                                    </button>
+                                                </form>
+
+                                                <!-- Edit Button -->
+                                                <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#editBattleModal_<?= (int)$bat['id'] ?>" title="Edit Battle">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+
+                                                <!-- Delete Button -->
+                                                <form method="POST" class="d-inline" onsubmit="return confirm('Permanently delete this contest battle?');">
+                                                    <?= Security::csrfField() ?>
+                                                    <input type="hidden" name="admin_action" value="delete_battle">
+                                                    <input type="hidden" name="battle_id" value="<?= (int)$bat['id'] ?>">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete Battle">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -1395,11 +1796,421 @@ $currency = Settings::getCurrencySymbol();
 </div>
 <?php endforeach; ?>
 
+<!-- ==================== ADD BATTLE MODAL ==================== -->
+<div class="modal fade" id="addBattleModal" tabindex="-1" aria-labelledby="addBattleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <div class="modal-header border-secondary bg-darker">
+                <h5 class="modal-title fw-bold text-warning" id="addBattleModalLabel">
+                    <i class="fas fa-fire me-2 text-danger"></i> Schedule New Contest Battle
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" enctype="multipart/form-data">
+                <?= Security::csrfField() ?>
+                <input type="hidden" name="admin_action" value="add_battle">
+
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <!-- Battle Title & Category -->
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold text-light">Battle Title <span class="text-danger">*</span></label>
+                            <input type="text" name="title" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Crown Rap Clash: Midnight Freestyle Showdown" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Category <span class="text-danger">*</span></label>
+                            <select name="category" class="form-select bg-dark border-secondary text-white">
+                                <option value="Rap Battle">🎤 Rap Battle</option>
+                                <option value="Dance Battle">💃 Dance Battle</option>
+                                <option value="Singing Battle">🎵 Singing Battle</option>
+                                <option value="Comedy Battle">🎭 Comedy Battle</option>
+                                <option value="Talent Battle" selected>⭐ Talent Battle</option>
+                                <option value="Modeling Clash">👑 Modeling Clash</option>
+                                <option value="Gaming Clash">🎮 Gaming Clash</option>
+                                <option value="Other">🔥 Other Showcase</option>
+                            </select>
+                        </div>
+
+                        <!-- Date & Time -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-light">Battle Date <span class="text-danger">*</span></label>
+                            <input type="date" name="battle_date" class="form-control bg-dark border-secondary text-white" value="<?= date('Y-m-d') ?>" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-light">Battle Time <span class="text-danger">*</span></label>
+                            <input type="text" name="battle_time" class="form-control bg-dark border-secondary text-white" placeholder="e.g. 08:00 PM WAT" value="08:00 PM WAT" required>
+                        </div>
+
+                        <!-- Contestant One & Two Section -->
+                        <div class="col-12 mt-3 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-users me-1 text-info"></i> Contestants Match-up Setup</h6>
+                        </div>
+
+                        <div class="col-md-6 p-3 rounded" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-primary text-white">Contestant 1 (Side A)</span>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold text-light">Full Name / Stage Name <span class="text-danger">*</span></label>
+                                <input type="text" name="contestant_one_name" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Queen Bella" required>
+                            </div>
+                            <div>
+                                <label class="form-label small fw-semibold text-light">Contestant 1 Photo</label>
+                                <input type="file" name="contestant_one_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                                <div class="form-text text-secondary" style="font-size: 11px;">Square portrait recommended (JPG, PNG, WEBP).</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 p-3 rounded" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-danger text-white">Contestant 2 (Side B)</span>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold text-light">Full Name / Stage Name <span class="text-danger">*</span></label>
+                                <input type="text" name="contestant_two_name" class="form-control bg-dark border-secondary text-white" placeholder="e.g. King Draco" required>
+                            </div>
+                            <div>
+                                <label class="form-label small fw-semibold text-light">Contestant 2 Photo</label>
+                                <input type="file" name="contestant_two_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                                <div class="form-text text-secondary" style="font-size: 11px;">Square portrait recommended (JPG, PNG, WEBP).</div>
+                            </div>
+                        </div>
+
+                        <!-- Banner & Description -->
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Battle Banner Image (Optional)</label>
+                            <input type="file" name="banner_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                            <div class="form-text text-secondary" style="font-size: 11px;">Wide banner header for the match card (JPG, PNG, WEBP).</div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Battle Description / Rules / Showdown Details</label>
+                            <textarea name="description" rows="3" class="form-control bg-dark border-secondary text-white" placeholder="Explain the format, rounds, audience voting rules, or special guests..."></textarea>
+                        </div>
+
+                        <!-- Venue System -->
+                        <div class="col-12 mt-3 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-map-marker-alt me-1 text-danger"></i> Venue & Stream Setup</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Venue Format <span class="text-danger">*</span></label>
+                            <select name="venue_type" id="add_battle_venue_type" class="form-select bg-dark border-secondary text-white" onchange="updateBattleVenueFields('add_battle')">
+                                <option value="online" selected>🌐 Online Livestream</option>
+                                <option value="physical">📍 Physical Event Venue</option>
+                            </select>
+                        </div>
+
+                        <!-- Online Fields -->
+                        <div class="col-md-8" id="add_battle_online_box">
+                            <div class="row g-2">
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-semibold text-light">Streaming Platform</label>
+                                    <select name="platform" class="form-select bg-dark border-secondary text-white">
+                                        <option value="Instagram Live">Instagram Live</option>
+                                        <option value="TikTok Live">TikTok Live</option>
+                                        <option value="YouTube Live">YouTube Live</option>
+                                        <option value="Facebook Live">Facebook Live</option>
+                                        <option value="X (Twitter) Live">X (Twitter) Live</option>
+                                        <option value="Twitch">Twitch</option>
+                                        <option value="Zoom">Zoom</option>
+                                        <option value="Custom Stream">Custom Stream URL</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-7">
+                                    <label class="form-label small fw-semibold text-light">Live Stream URL</label>
+                                    <input type="url" name="live_url" class="form-control bg-dark border-secondary text-white" placeholder="https://instagram.com/crownnightstar or live link">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Physical Fields -->
+                        <div class="col-12 d-none" id="add_battle_physical_box">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold text-light">Venue Name</label>
+                                    <input type="text" name="venue_name" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Crown Grand Ballroom & Lounge">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold text-light">Street Address</label>
+                                    <input type="text" name="venue_address" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Plot 14, Adetokunbo Ademola St">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-light">City</label>
+                                    <input type="text" name="venue_city" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Victoria Island">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-light">State / Region</label>
+                                    <input type="text" name="venue_state" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Lagos State, Nigeria">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-light">Google Maps URL</label>
+                                    <input type="url" name="maps_url" class="form-control bg-dark border-secondary text-white" placeholder="https://maps.google.com/?q=...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status, Order, Toggles -->
+                        <div class="col-12 mt-3 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-sliders-h me-1 text-primary"></i> Status & Display Settings</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Battle Status</label>
+                            <select name="status" class="form-select bg-dark border-secondary text-white">
+                                <option value="upcoming" selected>⚡ Upcoming</option>
+                                <option value="live">🔴 Live Now</option>
+                                <option value="ended">🏁 Ended / Concluded</option>
+                                <option value="cancelled">❌ Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Display Order</label>
+                            <input type="number" name="display_order" class="form-control bg-dark border-secondary text-white" value="0" min="0">
+                            <div class="form-text text-secondary" style="font-size: 11px;">Lower numbers appear first.</div>
+                        </div>
+                        <div class="col-md-4 d-flex flex-column justify-content-center pt-2">
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="is_featured" id="add_battle_featured">
+                                <label class="form-check-label text-warning small fw-semibold" for="add_battle_featured">⭐ Featured Battle</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_published" id="add_battle_published" checked>
+                                <label class="form-check-label text-light small fw-semibold" for="add_battle_published">Published & Visible</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-plus-circle me-1"></i> Create Contest Battle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== EDIT BATTLE MODALS ==================== -->
+<?php foreach ($battles as $bat): ?>
+<div class="modal fade" id="editBattleModal_<?= (int)$bat['id'] ?>" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <div class="modal-header border-secondary bg-darker">
+                <h5 class="modal-title fw-bold text-warning">
+                    <i class="fas fa-edit me-2 text-info"></i> Edit Battle: <?= e($bat['title']) ?>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" enctype="multipart/form-data">
+                <?= Security::csrfField() ?>
+                <input type="hidden" name="admin_action" value="update_battle">
+                <input type="hidden" name="battle_id" value="<?= (int)$bat['id'] ?>">
+
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <!-- Battle Title & Category -->
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold text-light">Battle Title <span class="text-danger">*</span></label>
+                            <input type="text" name="title" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['title']) ?>" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Category <span class="text-danger">*</span></label>
+                            <select name="category" class="form-select bg-dark border-secondary text-white">
+                                <?php 
+                                $battleCategories = ['Rap Battle', 'Dance Battle', 'Singing Battle', 'Comedy Battle', 'Talent Battle', 'Modeling Clash', 'Gaming Clash', 'Other'];
+                                foreach ($battleCategories as $bcat): ?>
+                                    <option value="<?= e($bcat) ?>" <?= $bat['category'] === $bcat ? 'selected' : '' ?>><?= e($bcat) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Date & Time -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-light">Battle Date <span class="text-danger">*</span></label>
+                            <input type="date" name="battle_date" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['battle_date']) ?>" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-light">Battle Time <span class="text-danger">*</span></label>
+                            <input type="text" name="battle_time" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['battle_time']) ?>" required>
+                        </div>
+
+                        <!-- Contestants Section -->
+                        <div class="col-12 mt-3 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-users me-1 text-info"></i> Contestants Match-up Setup</h6>
+                        </div>
+
+                        <div class="col-md-6 p-3 rounded" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-primary text-white">Contestant 1 (Side A)</span>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold text-light">Full Name / Stage Name <span class="text-danger">*</span></label>
+                                <input type="text" name="contestant_one_name" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['contestant_one_name']) ?>" required>
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <img src="<?= e($bat['contestant_one_image']) ?>" width="45" height="45" class="rounded-circle border border-primary object-fit-cover">
+                                    <div class="flex-grow-1">
+                                        <label class="form-label small fw-semibold text-light">Replace Photo</label>
+                                        <input type="file" name="contestant_one_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 p-3 rounded" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-danger text-white">Contestant 2 (Side B)</span>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold text-light">Full Name / Stage Name <span class="text-danger">*</span></label>
+                                <input type="text" name="contestant_two_name" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['contestant_two_name']) ?>" required>
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <img src="<?= e($bat['contestant_two_image']) ?>" width="45" height="45" class="rounded-circle border border-danger object-fit-cover">
+                                    <div class="flex-grow-1">
+                                        <label class="form-label small fw-semibold text-light">Replace Photo</label>
+                                        <input type="file" name="contestant_two_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Banner & Description -->
+                        <div class="col-12">
+                            <div class="d-flex align-items-center gap-3">
+                                <?php if (!empty($bat['banner_image'])): ?>
+                                    <img src="<?= e($bat['banner_image']) ?>" width="80" height="45" class="rounded border border-secondary object-fit-cover">
+                                <?php endif; ?>
+                                <div class="flex-grow-1">
+                                    <label class="form-label small fw-semibold text-light">Replace Battle Banner Image (Optional)</label>
+                                    <input type="file" name="banner_image" accept="image/jpeg,image/png,image/webp" class="form-control bg-dark border-secondary text-white">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-light">Battle Description / Rules / Showdown Details</label>
+                            <textarea name="description" rows="3" class="form-control bg-dark border-secondary text-white"><?= e($bat['description'] ?? '') ?></textarea>
+                        </div>
+
+                        <!-- Venue System -->
+                        <div class="col-12 mt-3 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-map-marker-alt me-1 text-danger"></i> Venue & Stream Setup</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Venue Format <span class="text-danger">*</span></label>
+                            <select name="venue_type" id="edit_battle_<?= $bat['id'] ?>_venue_type" class="form-select bg-dark border-secondary text-white" onchange="updateBattleVenueFields('edit_battle_<?= $bat['id'] ?>')">
+                                <option value="online" <?= $bat['venue_type'] === 'online' ? 'selected' : '' ?>>🌐 Online Livestream</option>
+                                <option value="physical" <?= $bat['venue_type'] === 'physical' ? 'selected' : '' ?>>📍 Physical Event Venue</option>
+                            </select>
+                        </div>
+
+                        <!-- Online Fields -->
+                        <div class="col-md-8 <?= $bat['venue_type'] !== 'online' ? 'd-none' : '' ?>" id="edit_battle_<?= $bat['id'] ?>_online_box">
+                            <div class="row g-2">
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-semibold text-light">Streaming Platform</label>
+                                    <select name="platform" class="form-select bg-dark border-secondary text-white">
+                                        <?php 
+                                        $platforms = ['Instagram Live', 'TikTok Live', 'YouTube Live', 'Facebook Live', 'X (Twitter) Live', 'Twitch', 'Zoom', 'Custom Stream'];
+                                        foreach ($platforms as $plat): ?>
+                                            <option value="<?= e($plat) ?>" <?= $bat['platform'] === $plat ? 'selected' : '' ?>><?= e($plat) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-7">
+                                    <label class="form-label small fw-semibold text-light">Live Stream URL</label>
+                                    <input type="url" name="live_url" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['live_url'] ?? '') ?>" placeholder="https://...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Physical Fields -->
+                        <div class="col-12 <?= $bat['venue_type'] !== 'physical' ? 'd-none' : '' ?>" id="edit_battle_<?= $bat['id'] ?>_physical_box">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold text-light">Venue Name</label>
+                                    <input type="text" name="venue_name" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['venue_name'] ?? '') ?>" placeholder="e.g. Crown Grand Ballroom & Lounge">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold text-light">Street Address</label>
+                                    <input type="text" name="venue_address" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['venue_address'] ?? '') ?>" placeholder="e.g. Plot 14, Adetokunbo Ademola St">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-light">City</label>
+                                    <input type="text" name="venue_city" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['venue_city'] ?? '') ?>" placeholder="e.g. Victoria Island">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-light">State / Region</label>
+                                    <input type="text" name="venue_state" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['venue_state'] ?? '') ?>" placeholder="e.g. Lagos State, Nigeria">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-light">Google Maps URL</label>
+                                    <input type="url" name="maps_url" class="form-control bg-dark border-secondary text-white" value="<?= e($bat['maps_url'] ?? '') ?>" placeholder="https://maps.google.com/?q=...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status, Order, Toggles -->
+                        <div class="col-12 mt-3 pt-2 border-top border-secondary">
+                            <h6 class="fw-bold text-warning mb-2"><i class="fas fa-sliders-h me-1 text-primary"></i> Status & Display Settings</h6>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Battle Status</label>
+                            <select name="status" class="form-select bg-dark border-secondary text-white">
+                                <option value="upcoming" <?= $bat['status'] === 'upcoming' ? 'selected' : '' ?>>⚡ Upcoming</option>
+                                <option value="live" <?= $bat['status'] === 'live' ? 'selected' : '' ?>>🔴 Live Now</option>
+                                <option value="ended" <?= $bat['status'] === 'ended' ? 'selected' : '' ?>>🏁 Ended / Concluded</option>
+                                <option value="cancelled" <?= $bat['status'] === 'cancelled' ? 'selected' : '' ?>>❌ Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-light">Display Order</label>
+                            <input type="number" name="display_order" class="form-control bg-dark border-secondary text-white" value="<?= (int)$bat['display_order'] ?>" min="0">
+                        </div>
+                        <div class="col-md-4 d-flex flex-column justify-content-center pt-2">
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="is_featured" id="edit_battle_featured_<?= $bat['id'] ?>" <?= !empty($bat['is_featured']) ? 'checked' : '' ?>>
+                                <label class="form-check-label text-warning small fw-semibold" for="edit_battle_featured_<?= $bat['id'] ?>">⭐ Featured Battle</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_published" id="edit_battle_published_<?= $bat['id'] ?>" <?= !empty($bat['is_published']) ? 'checked' : '' ?>>
+                                <label class="form-check-label text-light small fw-semibold" for="edit_battle_published_<?= $bat['id'] ?>">Published & Visible</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-save me-1"></i> Save Battle Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
+
 <script src="assets2/js/bootstrap.bundle.min.js"></script>
 <script>
 function toggleSelectAll(master) {
     const checkboxes = document.querySelectorAll('.user-chk');
     checkboxes.forEach(chk => chk.checked = master.checked);
+}
+
+function updateBattleVenueFields(prefix) {
+    const select = document.getElementById(prefix + '_venue_type');
+    if (!select) return;
+    const type = select.value;
+    const onlineBox = document.getElementById(prefix + '_online_box');
+    const physBox = document.getElementById(prefix + '_physical_box');
+    if (onlineBox) onlineBox.classList.toggle('d-none', type !== 'online');
+    if (physBox) physBox.classList.toggle('d-none', type !== 'physical');
 }
 
 function updateDeliveryFields(prefix) {
