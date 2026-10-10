@@ -18,6 +18,11 @@ $currency = Settings::getCurrencySymbol();
 $error = '';
 $success = '';
 
+// Check if request is AJAX
+$isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+    || isset($_POST['is_ajax'])
+    || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
+
 // Handle Registration Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$isRegistrationOpen) {
@@ -29,9 +34,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phoneNumber = trim($_POST['phone_number'] ?? '');
         $password    = $_POST['password'] ?? '';
         $bio         = trim($_POST['bio'] ?? '');
-        $videoUrl    = trim($_POST['video_url'] ?? '');
-        if (!empty($videoUrl) && !filter_var($videoUrl, FILTER_VALIDATE_URL)) {
-            $videoUrl = null;
+        
+        $rawVideo = trim($_POST['video_url'] ?? '');
+        $videoUrl = null;
+        if (!empty($rawVideo)) {
+            if (!preg_match('~^(?:f|ht)tps?://~i', $rawVideo)) {
+                $rawVideo = 'https://' . $rawVideo;
+            }
+            if (filter_var($rawVideo, FILTER_VALIDATE_URL)) {
+                $videoUrl = $rawVideo;
+            }
         }
 
         // Validation
@@ -48,7 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $pdo = DB::pdo();
 
-            // Auto-ensure video_url column exists
+            // Auto-ensure video_url and registration columns exist
+            try {
+                RegistrationService::ensureSchema();
+            } catch (Exception $e) {
+                // Handled in service
+            }
+
             try {
                 $pdo->query("SELECT video_url FROM users LIMIT 1");
             } catch (Exception $e) {
@@ -97,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':phone_number' => $phoneNumber,
                                 ':photo'        => $photoFilename,
                                 ':bio'          => $bio,
-                                ':video_url'    => !empty($videoUrl) ? $videoUrl : null,
+                                ':video_url'    => $videoUrl,
                                 ':reg_status'   => $initialRegStatus
                             ]);
                         } catch (Exception $subEx) {
@@ -132,12 +150,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $redirectTarget = $isFeeRequired ? 'complete_registration.php' : 'dashboard.php';
 
-                        // Check if AJAX request
-                        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-                            header('Content-Type: application/json');
+                        if ($isAjax) {
+                            header('Content-Type: application/json; charset=utf-8');
                             echo json_encode([
                                 'status'   => 'success',
-                                'message'  => $isFeeRequired ? 'Account created! Please complete registration payment.' : 'Registration successful! Redirecting...',
+                                'message'  => $isFeeRequired ? 'Account created! Redirecting to payment...' : 'Registration successful! Redirecting to your dashboard...',
                                 'redirect' => $redirectTarget
                             ]);
                             exit();
@@ -155,10 +172,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        http_response_code(422);
-        echo json_encode(['status' => 'error', 'message' => $error]);
+    if ($isAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        // Return status 200 with error payload so WAFs don't intercept with 403 page
+        echo json_encode([
+            'status'  => 'error',
+            'message' => !empty($error) ? $error : 'An unexpected error occurred. Please try again.'
+        ]);
         exit();
     }
 }
@@ -235,6 +255,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 6px 20px rgba(255, 215, 0, 0.3);
             color: #0d1117;
         }
+        .btn-gold:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
         .preview-box {
             width: 90px;
             height: 90px;
@@ -279,14 +303,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     <?php else: ?>
 
-        <?php if (!empty($error)): ?>
-            <div class="alert alert-danger py-2 px-3 small border-0 mb-3" style="background-color: rgba(220, 53, 69, 0.2); color: #ff6b7d;">
-                <i class="fas fa-exclamation-circle me-1"></i> <?= e($error) ?>
-            </div>
-        <?php endif; ?>
+        <!-- Client Alert Message Container -->
+        <div id="clientAlert" class="alert alert-danger py-2 px-3 small border-0 mb-3 <?= empty($error) ? 'd-none' : '' ?>" style="background-color: rgba(220, 53, 69, 0.2); color: #ff6b7d;">
+            <i class="fas fa-exclamation-circle me-1"></i> <span id="alertMsg"><?= e($error) ?></span>
+        </div>
 
-        <form method="POST" action="register.php" enctype="multipart/form-data">
+        <form id="registerForm" method="POST" action="register.php" enctype="multipart/form-data">
             <?= Security::csrfField() ?>
+            <input type="hidden" name="is_ajax" value="1">
 
             <!-- Photo Upload with Live Preview -->
             <div class="text-center mb-3">
@@ -336,13 +360,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </label>
                 <div class="input-group">
                     <span class="input-group-text bg-dark border-secondary text-warning"><i class="fas fa-video"></i></span>
-                    <input type="url" id="video_url" name="video_url" class="form-control" placeholder="YouTube or Instagram Reel URL" value="<?= e($_POST['video_url'] ?? '') ?>">
+                    <input type="url" id="video_url" name="video_url" class="form-control" placeholder="https://youtube.com/watch?v=... or Reel URL" value="<?= e($_POST['video_url'] ?? '') ?>">
                 </div>
                 <div class="form-text text-secondary" style="font-size: 11px;">You can also add or update this anytime on your dashboard.</div>
             </div>
 
             <div class="d-grid mb-3">
-                <button class="btn btn-gold" type="submit"><i class="fas fa-check-circle me-2"></i> Continue to Complete Registration</button>
+                <button class="btn btn-gold" type="submit" id="submitBtn">
+                    <i class="fas fa-check-circle me-2"></i> Continue to Complete Registration
+                </button>
             </div>
 
             <p class="text-center text-secondary small mb-0">
@@ -356,7 +382,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <script>
 function previewImage(event) {
     const input = event.target;
+    const alertBox = document.getElementById('clientAlert');
+    const alertMsg = document.getElementById('alertMsg');
+
     if (input.files && input.files[0]) {
+        const file = input.files[0];
+
+        // Validate size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alertMsg.textContent = 'Selected photo exceeds the 5MB size limit. Please choose a smaller image.';
+            alertBox.classList.remove('d-none');
+            input.value = '';
+            return;
+        }
+
+        // Validate extension / MIME
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp)$/i)) {
+            alertMsg.textContent = 'Invalid file format. Please upload a JPG, PNG, or WEBP image.';
+            alertBox.classList.remove('d-none');
+            input.value = '';
+            return;
+        }
+
+        alertBox.classList.add('d-none');
+
         const reader = new FileReader();
         reader.onload = function(e) {
             const preview = document.getElementById('photoPreview');
@@ -365,9 +415,89 @@ function previewImage(event) {
             preview.style.display = 'block';
             placeholder.style.display = 'none';
         }
-        reader.readAsDataURL(input.files[0]);
+        reader.readAsDataURL(file);
     }
 }
+
+// Resilient AJAX Form Submission (Bypasses WAF & LiteSpeed 403 page trips)
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('registerForm');
+    if (!form) return;
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const btn = document.getElementById('submitBtn');
+        const alertBox = document.getElementById('clientAlert');
+        const alertMsg = document.getElementById('alertMsg');
+
+        // Client-side quick checks
+        const photoInput = document.getElementById('photo');
+        if (!photoInput.files || !photoInput.files[0]) {
+            alertMsg.textContent = 'Please choose a profile photo for the competition.';
+            alertBox.classList.remove('d-none');
+            alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        const passInput = document.getElementById('password');
+        if (passInput.value.length < 6) {
+            alertMsg.textContent = 'Password must be at least 6 characters in length.';
+            alertBox.classList.remove('d-none');
+            passInput.focus();
+            return;
+        }
+
+        alertBox.classList.add('d-none');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Creating Account & Uploading...';
+
+        try {
+            const formData = new FormData(form);
+            formData.set('is_ajax', '1');
+
+            const response = await fetch('register.php', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: formData
+            });
+
+            let data;
+            const textResponse = await response.text();
+            try {
+                data = JSON.parse(textResponse);
+            } catch (jsonErr) {
+                // If response is HTML / redirect
+                if (response.status === 200) {
+                    window.location.href = 'complete_registration.php';
+                    return;
+                }
+                throw new Error('Server returned an unexpected response. Please try again.');
+            }
+
+            if (data.status === 'success') {
+                btn.className = 'btn btn-success fw-bold';
+                btn.innerHTML = '<i class="fas fa-check-circle me-2"></i> Account Created! Redirecting...';
+                setTimeout(function() {
+                    window.location.href = data.redirect || 'complete_registration.php';
+                }, 500);
+            } else {
+                throw new Error(data.message || 'Registration failed. Please verify your details.');
+            }
+
+        } catch (err) {
+            btn.disabled = false;
+            btn.className = 'btn btn-gold';
+            btn.innerHTML = '<i class="fas fa-check-circle me-2"></i> Continue to Complete Registration';
+            alertMsg.textContent = err.message || 'An error occurred during submission. Please try again.';
+            alertBox.classList.remove('d-none');
+            alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+});
 </script>
 
 </body>

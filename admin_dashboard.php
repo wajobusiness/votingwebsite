@@ -104,6 +104,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
 
+            case 'quick_approve_registration':
+                $targetUserId = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
+                if ($targetUserId) {
+                    $ref = 'MANUAL_ADMIN_APPROVED_' . date('Ymd_His') . '_' . $targetUserId;
+                    $res = RegistrationService::manuallyUpdateStatus($targetUserId, 'paid', null, $ref);
+                    if ($res['success']) {
+                        $_SESSION['flash_success'] = "✅ " . $res['message'] . " - Contestant is now verified and has full dashboard access!";
+                    } else {
+                        $_SESSION['flash_error'] = $res['error'];
+                    }
+                } else {
+                    $_SESSION['flash_error'] = "Invalid contestant ID.";
+                }
+                break;
+
+            case 'bulk_approve_registration':
+                $selectedIds = $_POST['selected_users'] ?? [];
+                if (!empty($selectedIds) && is_array($selectedIds)) {
+                    $res = RegistrationService::bulkApproveRegistrations($selectedIds);
+                    $_SESSION['flash_success'] = "✅ " . $res['message'];
+                } else {
+                    $_SESSION['flash_error'] = "Please select at least one contestant to approve.";
+                }
+                break;
+
             case 'update_user_registration_status':
                 $targetUserId = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
                 $regStatus = trim($_POST['registration_status'] ?? '');
@@ -942,6 +967,19 @@ $currency = Settings::getCurrencySymbol();
                     </div>
                 </div>
 
+                <!-- Pending Review Notice Banner -->
+                <?php if ($regStats['pending_count'] > 0 && $regFilter !== 'pending'): ?>
+                    <div class="alert alert-warning py-2 px-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2 border-0 shadow-sm" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border-left: 4px solid #f59e0b !important;">
+                        <div class="d-flex align-items-center gap-2 small">
+                            <i class="fas fa-clock fa-lg"></i>
+                            <span>You have <strong><?= (int)$regStats['pending_count'] ?> contestant(s)</strong> awaiting payment verification. If they paid via manual bank transfer, you can approve them with 1 click.</span>
+                        </div>
+                        <a href="admin_dashboard.php?reg_filter=pending" class="btn btn-warning btn-sm fw-bold text-dark text-nowrap">
+                            <i class="fas fa-user-check me-1"></i> Review & Approve Pending (<?= (int)$regStats['pending_count'] ?>)
+                        </a>
+                    </div>
+                <?php endif; ?>
+
                 <!-- Filters & Search Toolbar -->
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 p-3 rounded bg-darker border border-secondary border-opacity-25">
                     <div class="d-flex flex-wrap gap-1">
@@ -952,7 +990,7 @@ $currency = Settings::getCurrencySymbol();
                             <i class="fas fa-check-circle me-1"></i> Paid & Active (<?= $regStats['paid_count'] ?>)
                         </a>
                         <a href="admin_dashboard.php?reg_filter=pending" class="btn btn-sm <?= ($regFilter === 'pending') ? 'btn-warning' : 'btn-outline-warning' ?>">
-                            <i class="fas fa-clock me-1"></i> Pending Payment (<?= $regStats['pending_count'] ?>)
+                            <i class="fas fa-clock me-1"></i> Pending Approval (<?= $regStats['pending_count'] ?>)
                         </a>
                         <a href="admin_dashboard.php?reg_filter=exempt" class="btn btn-sm <?= ($regFilter === 'exempt') ? 'btn-info' : 'btn-outline-info' ?>">
                             <i class="fas fa-gift me-1"></i> Exempt (<?= $regStats['exempt_count'] ?>)
@@ -971,7 +1009,6 @@ $currency = Settings::getCurrencySymbol();
 
                 <form method="POST" id="batchForm">
                     <?= Security::csrfField() ?>
-                    <input type="hidden" name="admin_action" value="delete_selected_users">
 
                     <div class="table-responsive">
                         <table class="table table-custom table-hover">
@@ -1041,7 +1078,19 @@ $currency = Settings::getCurrencySymbol();
                                                 </form>
                                             </td>
                                             <td class="text-end">
-                                                <div class="d-inline-flex gap-1">
+                                                <div class="d-inline-flex gap-1 align-items-center">
+                                                    <?php if ($cStatus === 'pending'): ?>
+                                                        <!-- Direct One-Click Manual Payment Approval -->
+                                                        <form method="POST" class="d-inline" onsubmit="return confirm('Approve manual payment for <?= e(addslashes($c['full_name'])) ?>? This will immediately verify and activate their account.');">
+                                                            <?= Security::csrfField() ?>
+                                                            <input type="hidden" name="admin_action" value="quick_approve_registration">
+                                                            <input type="hidden" name="user_id" value="<?= (int)$c['id'] ?>">
+                                                            <button type="submit" class="btn btn-success btn-sm fw-bold text-nowrap shadow-sm" title="Quick Approve Payment & Activate">
+                                                                <i class="fas fa-check-circle me-1"></i> Approve
+                                                            </button>
+                                                        </form>
+                                                    <?php endif; ?>
+
                                                     <!-- Change Registration Status Modal Trigger -->
                                                     <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#statusModal_<?= (int)$c['id'] ?>" title="Manage Registration Status">
                                                         <i class="fas fa-user-check"></i>
@@ -1076,8 +1125,12 @@ $currency = Settings::getCurrencySymbol();
                     </div>
 
                     <?php if (!empty($contestants)): ?>
-                        <div class="mt-3">
-                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete all selected contestants?');">
+                        <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+                            <span class="text-secondary small me-1"><i class="fas fa-tasks me-1"></i> Batch Actions:</span>
+                            <button type="submit" name="admin_action" value="bulk_approve_registration" class="btn btn-success btn-sm fw-semibold" onclick="return confirm('Approve and activate all selected contestants?');">
+                                <i class="fas fa-check-double me-1"></i> Approve Selected (Manual Payment)
+                            </button>
+                            <button type="submit" name="admin_action" value="delete_selected_users" class="btn btn-outline-danger btn-sm" onclick="return confirm('Permanently delete all selected contestants?');">
                                 <i class="fas fa-trash-alt me-1"></i> Delete Selected Contestants
                             </button>
                         </div>
@@ -1799,15 +1852,21 @@ $currency = Settings::getCurrencySymbol();
                         <input type="number" step="100" min="0" name="fee_paid" class="form-control bg-dark border-secondary text-white" value="<?= (float)($c['registration_fee_paid'] ?? $regFee) ?>">
                     </div>
 
-                    <div class="mb-2">
+                    <div class="mb-3">
                         <label class="form-label small fw-semibold text-light">Payment Reference / Note (Optional)</label>
-                        <input type="text" name="payment_ref" class="form-control bg-dark border-secondary text-white" value="<?= e($c['registration_payment_ref'] ?? '') ?>" placeholder="e.g. MANUAL_ADMIN_VERIFIED or Paystack ref">
+                        <input type="text" name="payment_ref" class="form-control bg-dark border-secondary text-white" value="<?= e($c['registration_payment_ref'] ?? '') ?>" placeholder="e.g. MANUAL_BANK_TRANSFER or Paystack ref">
                     </div>
+
+                    <?php if (($c['registration_status'] ?? '') === 'pending'): ?>
+                        <div class="p-2 rounded bg-darker border border-secondary border-opacity-50 small text-secondary">
+                            <i class="fas fa-info-circle text-info me-1"></i> Quick Action: Setting status to <strong>Paid</strong> will immediately activate this contestant's profile and grant them full dashboard access.
+                        </div>
+                    <?php endif; ?>
                 </div>
 
                 <div class="modal-footer border-secondary">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-save me-1"></i> Update Status</button>
+                    <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-save me-1"></i> Save Status</button>
                 </div>
             </form>
         </div>

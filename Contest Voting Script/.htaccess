@@ -1,0 +1,58 @@
+# ==============================================================================
+# LiteSpeed Web Server & Apache Configuration for Crown Night Star Contest
+# ==============================================================================
+
+# Disable directory browsing
+Options -Indexes
+
+# Enable SymLinks
+Options +FollowSymLinks
+
+# Disable ModSecurity rule trips on legitimate form POSTs & file uploads
+<IfModule mod_security.c>
+    SecFilterEngine Off
+    SecFilterScanPOST Off
+</IfModule>
+
+<IfModule mod_security2.c>
+    SecRuleEngine Off
+</IfModule>
+
+# LiteSpeed Web Server Specific Directives
+<IfModule Litespeed>
+    # Disable LiteSpeed WAF interference with registration & payment forms
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} ^(POST|PUT)
+    RewriteRule .* - [E=noconntimeout:1]
+</IfModule>
+
+# Allow standard HTTP request methods
+<Limit GET POST PUT DELETE HEAD OPTIONS>
+    Order Allow,Deny
+    Allow from all
+</Limit>
+
+# PHP Execution & Upload Settings (if supported by PHP handler)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 20M
+    php_value post_max_size 25M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+    php_value memory_limit 128M
+</IfModule>
+
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 20M
+    php_value post_max_size 25M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+    php_value memory_limit 128M
+</IfModule>
+
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 20M
+    php_value post_max_size 25M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+    php_value memory_limit 128M
+</IfModule>

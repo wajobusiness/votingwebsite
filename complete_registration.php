@@ -343,3 +343,4 @@ function initiateRegistrationPayment() {
 
 </body>
 </html>
+

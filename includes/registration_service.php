@@ -364,7 +364,7 @@ class RegistrationService {
 
         $pdo = DB::pdo();
 
-        $stmt = $pdo->prepare("SELECT id, full_name, email, registration_status FROM `users` WHERE id = ? AND is_admin = 0 LIMIT 1");
+        $stmt = $pdo->prepare("SELECT id, full_name, email, phone_number, username, registration_status FROM `users` WHERE id = ? AND is_admin = 0 LIMIT 1");
         $stmt->execute([$userId]);
         $user = $stmt->fetch();
 
@@ -393,9 +393,64 @@ class RegistrationService {
             ':id'      => $userId
         ]);
 
+        // If marked as paid, also record in payments ledger for financial audit trail if not already present
+        if ($status === 'paid' && !empty($ref)) {
+            try {
+                $checkP = $pdo->prepare("SELECT id FROM `payments` WHERE transaction_id = ? LIMIT 1");
+                $checkP->execute([$ref]);
+                if (!$checkP->fetch()) {
+                    $insertP = $pdo->prepare("
+                        INSERT INTO `payments` (
+                            `user_id`, `transaction_id`, `amount`, `currency`, `status`,
+                            `payment_method`, `payment_type`, `channel`, `payer_email`, `payer_name`,
+                            `payer_phone`, `ip_address`, `created_at`
+                        ) VALUES (
+                            :user_id, :transaction_id, :amount, 'NGN', 'success',
+                            'manual_admin', 'registration', 'manual_bank_transfer', :payer_email, :payer_name,
+                            :payer_phone, :ip_address, NOW()
+                        )
+                    ");
+                    $insertP->execute([
+                        ':user_id'        => $userId,
+                        ':transaction_id' => $ref,
+                        ':amount'         => $feeAmount,
+                        ':payer_email'    => $user['email'] ?? '',
+                        ':payer_name'     => $user['full_name'] ?? $user['username'],
+                        ':payer_phone'    => $user['phone_number'] ?? '',
+                        ':ip_address'     => Security::getClientIp()
+                    ]);
+                }
+            } catch (Exception $payEx) {
+                error_log("Manual payment ledger sync error: " . $payEx->getMessage());
+            }
+        }
+
         return [
             'success' => true,
-            'message' => "Contestant {$user['full_name']} registration status updated to: " . strtoupper($status)
+            'message' => "Contestant {$user['full_name']} registration approved and set to: " . strtoupper($status)
+        ];
+    }
+
+    /**
+     * Bulk approve and activate multiple contestants (Admin Manual Approval)
+     */
+    public static function bulkApproveRegistrations(array $userIds, ?string $adminNotes = null): array {
+        self::ensureSchema();
+        $approvedCount = 0;
+        foreach ($userIds as $id) {
+            $id = (int)$id;
+            if ($id > 0) {
+                $ref = 'MANUAL_BULK_APPROVED_' . time() . '_' . $id;
+                $res = self::manuallyUpdateStatus($id, 'paid', null, $ref);
+                if ($res['success']) {
+                    $approvedCount++;
+                }
+            }
+        }
+        return [
+            'success' => true,
+            'count'   => $approvedCount,
+            'message' => "Successfully approved and activated {$approvedCount} contestant(s)."
         ];
     }
 
@@ -513,3 +568,4 @@ class RegistrationService {
         }
     }
 }
+
