@@ -25,6 +25,7 @@ INSERT INTO `settings` (`name`, `value`) VALUES
 ('currency_symbol', '₦'),
 ('currency_code', 'NGN'),
 ('vote_price', '50'),
+('registration_fee', '0'),
 ('registration_open', '1'),
 ('voting_open', '1'),
 ('competition_end_time', '2026-12-31T23:59'),
@@ -80,6 +81,10 @@ CREATE TABLE IF NOT EXISTS `users` (
   `vote_count` INT(11) DEFAULT 0,
   `is_admin` TINYINT(1) DEFAULT 0,
   `is_active` TINYINT(1) DEFAULT 1,
+  `registration_status` ENUM('pending', 'paid', 'exempt') NOT NULL DEFAULT 'paid',
+  `registration_paid_at` DATETIME DEFAULT NULL,
+  `registration_payment_ref` VARCHAR(100) DEFAULT NULL,
+  `registration_fee_paid` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   `competition_id` INT(11) DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -88,6 +93,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `idx_user_email` (`email`),
   KEY `idx_user_votes` (`vote_count` DESC),
   KEY `idx_user_admin` (`is_admin`),
+  KEY `idx_user_reg_status` (`registration_status`),
   KEY `idx_user_competition` (`competition_id`),
   CONSTRAINT `fk_users_competition` FOREIGN KEY (`competition_id`) REFERENCES `competitions` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -97,12 +103,13 @@ CREATE TABLE IF NOT EXISTS `users` (
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `payments` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
-  `user_id` INT(11) DEFAULT NULL COMMENT 'Contestant who received votes',
+  `user_id` INT(11) DEFAULT NULL COMMENT 'Contestant who received votes or registered',
   `transaction_id` VARCHAR(100) NOT NULL COMMENT 'Paystack transaction ID / Reference',
   `amount` DECIMAL(10,2) NOT NULL COMMENT 'Amount paid in main currency (e.g. 500.00)',
   `currency` VARCHAR(10) DEFAULT 'NGN',
   `status` VARCHAR(50) NOT NULL DEFAULT 'pending',
   `payment_method` VARCHAR(50) DEFAULT 'paystack',
+  `payment_type` VARCHAR(50) NOT NULL DEFAULT 'vote' COMMENT 'vote, book, registration',
   `channel` VARCHAR(50) DEFAULT NULL COMMENT 'card, bank, ussd, etc.',
   `payer_email` VARCHAR(100) DEFAULT NULL,
   `payer_name` VARCHAR(100) DEFAULT NULL,
@@ -114,6 +121,7 @@ CREATE TABLE IF NOT EXISTS `payments` (
   UNIQUE KEY `idx_payment_reference` (`transaction_id`),
   KEY `idx_payment_user_id` (`user_id`),
   KEY `idx_payment_status` (`status`),
+  KEY `idx_payment_type` (`payment_type`),
   KEY `idx_payment_created` (`created_at`),
   CONSTRAINT `fk_payments_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

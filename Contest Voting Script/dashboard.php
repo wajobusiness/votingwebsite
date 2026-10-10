@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-Auth::requireUser();
+// Enforce login and complete registration
+Auth::requireRegistrationComplete();
 
 $user = Auth::getCurrentUser();
 if (!$user) {
@@ -11,8 +12,9 @@ if (!$user) {
 $pdo = DB::pdo();
 $userId = (int)$user['id'];
 
-$successMessage = '';
-$errorMessage = '';
+$successMessage = $_SESSION['flash_success'] ?? '';
+$errorMessage = $_SESSION['flash_error'] ?? '';
+unset($_SESSION['flash_success'], $_SESSION['flash_error']);
 
 // Auto-ensure video_url column exists in users table
 try {
@@ -25,18 +27,20 @@ try {
     }
 }
 
-// Handle Photo Update
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
+// Handle Photo Update / Upload
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_photo') {
     if (!Security::validateCsrf()) {
         $errorMessage = 'Security session expired. Please refresh the page and try again.';
+    } elseif (!isset($_FILES['photo']) || $_FILES['photo']['error'] === UPLOAD_ERR_NO_FILE) {
+        $errorMessage = 'Please select an image file to upload as your profile photo.';
     } else {
         $upload = Security::handleFileUpload($_FILES['photo'], __DIR__ . '/uploads/', ['jpg', 'jpeg', 'png', 'webp'], 5);
 
         if ($upload['success']) {
             $newPhoto = $upload['filename'];
 
-            // Optionally delete old photo if not default
-            if (!empty($user['photo']) && $user['photo'] !== 'default_avatar.png') {
+            // Delete previous custom photo file safely
+            if (!empty($user['photo']) && $user['photo'] !== 'default_avatar.png' && $user['photo'] !== 'default_avatar.svg') {
                 $oldPath = __DIR__ . '/uploads/' . $user['photo'];
                 if (file_exists($oldPath) && is_file($oldPath)) {
                     @unlink($oldPath);
@@ -47,29 +51,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
             $stmt->execute([':photo' => $newPhoto, ':id' => $userId]);
 
             $user['photo'] = $newPhoto;
-            $successMessage = "Profile photo updated successfully!";
+            $successMessage = "Profile photo updated successfully! Your public voting profile reflects this immediately.";
         } else {
             $errorMessage = $upload['error'];
         }
     }
 }
 
+// Handle Photo Removal (Reset to Default)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'remove_photo') {
+    if (!Security::validateCsrf()) {
+        $errorMessage = 'Security session expired. Please try again.';
+    } else {
+        if (!empty($user['photo']) && $user['photo'] !== 'default_avatar.png' && $user['photo'] !== 'default_avatar.svg') {
+            $oldPath = __DIR__ . '/uploads/' . $user['photo'];
+            if (file_exists($oldPath) && is_file($oldPath)) {
+                @unlink($oldPath);
+            }
+        }
+
+        $stmt = $pdo->prepare("UPDATE users SET photo = 'default_avatar.png' WHERE id = :id");
+        $stmt->execute([':id' => $userId]);
+
+        $user['photo'] = 'default_avatar.png';
+        $successMessage = "Profile photo removed. Default avatar is now displayed.";
+    }
+}
+
 // Handle Video URL Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_video') {
-    $videoUrl = trim($_POST['video_url'] ?? '');
-
-    if (empty($videoUrl)) {
-        $stmt = $pdo->prepare("UPDATE users SET video_url = NULL WHERE id = :id");
-        $stmt->execute([':id' => $userId]);
-        $user['video_url'] = null;
-        $successMessage = "Showcase video link removed.";
-    } elseif (!filter_var($videoUrl, FILTER_VALIDATE_URL)) {
-        $errorMessage = "Please enter a valid video link (e.g., https://youtu.be/... or https://instagram.com/reel/...).";
+    if (!Security::validateCsrf()) {
+        $errorMessage = 'Security session expired. Please refresh the page and try again.';
     } else {
-        $stmt = $pdo->prepare("UPDATE users SET video_url = :url WHERE id = :id");
-        $stmt->execute([':url' => $videoUrl, ':id' => $userId]);
-        $user['video_url'] = $videoUrl;
-        $successMessage = "Showcase video link updated! It is now live on your voting page.";
+        $videoUrl = trim($_POST['video_url'] ?? '');
+
+        if (empty($videoUrl)) {
+            $stmt = $pdo->prepare("UPDATE users SET video_url = NULL WHERE id = :id");
+            $stmt->execute([':id' => $userId]);
+            $user['video_url'] = null;
+            $successMessage = "Showcase video link removed.";
+        } elseif (!filter_var($videoUrl, FILTER_VALIDATE_URL)) {
+            $errorMessage = "Please enter a valid video link (e.g., https://youtu.be/... or https://instagram.com/reel/...).";
+        } else {
+            $stmt = $pdo->prepare("UPDATE users SET video_url = :url WHERE id = :id");
+            $stmt->execute([':url' => $videoUrl, ':id' => $userId]);
+            $user['video_url'] = $videoUrl;
+            $successMessage = "Showcase video link updated! It is now live on your voting page.";
+        }
     }
 }
 
@@ -77,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $userRank = 1;
 $totalContestants = 0;
 try {
-    $rankStmt = $pdo->query("SELECT id, vote_count FROM users WHERE is_admin = 0 ORDER BY vote_count DESC");
+    $rankStmt = $pdo->query("SELECT id, vote_count FROM users WHERE is_admin = 0 AND (registration_status IN ('paid', 'exempt') OR registration_status IS NULL) ORDER BY vote_count DESC");
     $rankings = $rankStmt->fetchAll();
     $totalContestants = count($rankings);
     $posCounter = 1;
@@ -113,8 +141,9 @@ $endTime = Settings::getCompetitionEndTime();
 $currency = Settings::getCurrencySymbol();
 $siteUrl = Env::get('APP_URL', 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
 $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
+$userAvatarUrl = Auth::getAvatarUrl($user['photo'] ?? null);
 
-// 4. Fetch User's Purchased Books & Masterclasses
+// Fetch User's Purchased Books & Masterclasses
 $myPurchases = [];
 try {
     $myPurchases = BookstoreService::getPurchasesByUser($userId, $user['email'] ?? '');
@@ -166,12 +195,14 @@ try {
             margin: 0 auto 16px;
             position: relative;
             box-shadow: 0 0 25px rgba(255, 215, 0, 0.25);
+            overflow: hidden;
         }
         .avatar-container img {
             width: 100%;
             height: 100%;
             border-radius: 50%;
             object-fit: cover;
+            transition: transform 0.3s ease;
         }
         .stat-badge {
             font-size: 32px;
@@ -225,6 +256,17 @@ try {
             font-size: 14px;
             padding: 12px 8px;
         }
+        .photo-picker-box {
+            background: rgba(15, 11, 30, 0.7);
+            border: 1px dashed rgba(255, 215, 0, 0.4);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        .photo-picker-box:hover {
+            border-color: #ffd700;
+        }
     </style>
 </head>
 <body>
@@ -264,16 +306,23 @@ try {
     <?php endif; ?>
 
     <div class="row">
-        <!-- Contestant Profile Card -->
+        <!-- Contestant Profile Card & Photo Management -->
         <div class="col-lg-4">
             <div class="dashboard-card text-center">
-                <div class="avatar-container">
-                    <img src="uploads/<?= e($user['photo']) ?>" alt="<?= e($user['username']) ?>">
+                <div class="avatar-container" id="avatarBox">
+                    <img src="<?= e($userAvatarUrl) ?>" alt="<?= e($user['username']) ?>" id="currentAvatarImg">
                 </div>
                 <h4 class="fw-bold text-white mb-1"><?= e($user['full_name']) ?></h4>
-                <p class="text-secondary small mb-3">@<?= e($user['username']) ?></p>
+                <p class="text-secondary small mb-2">@<?= e($user['username']) ?></p>
 
-                <div class="d-flex justify-content-center gap-2 mb-4">
+                <!-- Verified Registration Pill -->
+                <div class="mb-3">
+                    <span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-50 py-1 px-3">
+                        <i class="fas fa-check-circle me-1"></i> Verified & Active Entry
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-center gap-2 mb-3">
                     <span class="badge bg-warning text-dark px-3 py-2 fw-bold">
                         <i class="fas fa-layer-group me-1"></i> <?= e($currentStage) ?>
                     </span>
@@ -284,16 +333,50 @@ try {
 
                 <hr class="border-secondary opacity-25">
 
-                <!-- Update Photo Form -->
-                <form method="POST" action="dashboard.php" enctype="multipart/form-data" class="mt-3">
-                    <?= Security::csrfField() ?>
-                    <label class="form-label text-light small fw-semibold d-block text-start">Change Profile Photo</label>
-                    <div class="input-group mb-2">
-                        <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required class="form-control form-control-sm">
-                        <button type="submit" class="btn btn-warning btn-sm fw-bold">Upload</button>
+                <!-- Profile Photo Management Section -->
+                <div class="text-start">
+                    <label class="form-label text-light small fw-bold mb-2">
+                        <i class="fas fa-camera text-warning me-1"></i> Manage Profile Photo
+                    </label>
+
+                    <form method="POST" action="dashboard.php" enctype="multipart/form-data" id="photoForm">
+                        <?= Security::csrfField() ?>
+                        <input type="hidden" name="action" value="update_photo">
+
+                        <div class="photo-picker-box mb-2">
+                            <label for="dashboardPhotoInput" class="d-block text-secondary small mb-2" style="cursor: pointer;">
+                                <i class="fas fa-cloud-upload-alt fa-2x text-warning d-block mb-1"></i>
+                                <span id="fileLabelText">Click or Drag to choose new photo</span>
+                            </label>
+                            <input type="file" id="dashboardPhotoInput" name="photo" accept="image/jpeg,image/png,image/webp" class="d-none" onchange="previewAvatar(event)">
+                        </div>
+
+                        <!-- Live Preview Notice Bar -->
+                        <div id="savePhotoActionGroup" class="d-none mb-2">
+                            <div class="alert alert-warning py-1 px-2 small mb-2" style="font-size: 11px;">
+                                <i class="fas fa-info-circle me-1"></i> Photo previewed above. Click Save to apply changes.
+                            </div>
+                            <button type="submit" class="btn btn-gold btn-sm w-100 fw-bold">
+                                <i class="fas fa-save me-1"></i> Save New Profile Photo
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Remove Photo Button (if not already default) -->
+                    <?php if (!empty($user['photo']) && $user['photo'] !== 'default_avatar.png' && $user['photo'] !== 'default_avatar.svg'): ?>
+                        <form method="POST" action="dashboard.php" onsubmit="return confirm('Reset your profile photo to the default avatar?');" class="mt-2 text-center">
+                            <?= Security::csrfField() ?>
+                            <input type="hidden" name="action" value="remove_photo">
+                            <button type="submit" class="btn btn-outline-danger btn-sm py-1 px-2 w-100" style="font-size: 11px;">
+                                <i class="fas fa-trash-alt me-1"></i> Remove Photo (Use Default)
+                            </button>
+                        </form>
+                    <?php endif; ?>
+
+                    <div class="form-text text-secondary text-center mt-2" style="font-size: 11px;">
+                        JPG, PNG, WEBP &bull; Max 5MB &bull; Square format recommended
                     </div>
-                    <div class="form-text text-secondary text-start" style="font-size: 11px;">Max 5MB (JPG, PNG, WEBP)</div>
-                </form>
+                </div>
             </div>
         </div>
 
@@ -489,6 +572,37 @@ function copyProfileLink() {
     navigator.clipboard.writeText(linkInput.value).then(() => {
         alert("Voting profile link copied to clipboard!");
     });
+}
+
+function previewAvatar(event) {
+    const input = event.target;
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        
+        // Validate file size (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert("Selected image exceeds maximum 5MB size limit. Please choose a smaller photo.");
+            input.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const avatarImg = document.getElementById('currentAvatarImg');
+            if (avatarImg) {
+                avatarImg.src = e.target.result;
+            }
+            const labelText = document.getElementById('fileLabelText');
+            if (labelText) {
+                labelText.innerText = "Selected: " + file.name;
+            }
+            const actionGroup = document.getElementById('savePhotoActionGroup');
+            if (actionGroup) {
+                actionGroup.classList.remove('d-none');
+            }
+        };
+        reader.readAsDataURL(file);
+    }
 }
 </script>
 

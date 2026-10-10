@@ -94,6 +94,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
 
+            case 'update_registration_fee':
+                $fee = filter_input(INPUT_POST, 'registration_fee', FILTER_VALIDATE_FLOAT);
+                if ($fee !== false && $fee >= 0) {
+                    Settings::set('registration_fee', (string)$fee);
+                    $_SESSION['flash_success'] = "Contestant Registration Fee updated to: " . Settings::getCurrencySymbol() . number_format($fee, 2) . ($fee == 0 ? ' (Free Registration)' : '');
+                } else {
+                    $_SESSION['flash_error'] = "Invalid registration fee amount.";
+                }
+                break;
+
+            case 'update_user_registration_status':
+                $targetUserId = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
+                $regStatus = trim($_POST['registration_status'] ?? '');
+                $regAmount = isset($_POST['fee_paid']) ? (float)$_POST['fee_paid'] : null;
+                $regRef = trim($_POST['payment_ref'] ?? '');
+                if ($targetUserId && in_array($regStatus, ['paid', 'pending', 'exempt'], true)) {
+                    $res = RegistrationService::manuallyUpdateStatus($targetUserId, $regStatus, $regAmount, !empty($regRef) ? $regRef : null);
+                    if ($res['success']) {
+                        $_SESSION['flash_success'] = $res['message'];
+                    } else {
+                        $_SESSION['flash_error'] = $res['error'];
+                    }
+                } else {
+                    $_SESSION['flash_error'] = "Invalid parameters for updating registration status.";
+                }
+                break;
+
+            case 'export_registrations':
+                $regs = RegistrationService::getAllRegistrations('all', null, 5000);
+                header('Content-Type: text/csv; charset=utf-8');
+                header('Content-Disposition: attachment; filename=contestants_registration_report_' . date('Y_m_d_His') . '.csv');
+                $outCsv = fopen('php://output', 'w');
+                fputcsv($outCsv, ['ID', 'Full Name', 'Username', 'Email', 'Phone Number', 'Registration Status', 'Fee Paid', 'Payment Ref', 'Paid Date', 'Votes', 'Registered Date']);
+                foreach ($regs as $r) {
+                    fputcsv($outCsv, [
+                        $r['id'],
+                        $r['full_name'],
+                        $r['username'],
+                        $r['email'],
+                        $r['phone_number'],
+                        strtoupper($r['registration_status'] ?? 'PAID'),
+                        $r['registration_fee_paid'] ?? '0.00',
+                        $r['registration_payment_ref'] ?? '',
+                        $r['registration_paid_at'] ?? '',
+                        $r['vote_count'],
+                        $r['created_at']
+                    ]);
+                }
+                fclose($outCsv);
+                exit();
+
             case 'update_vote_price':
                 $price = filter_input(INPUT_POST, 'vote_price', FILTER_VALIDATE_FLOAT);
                 if ($price && $price > 0) {
@@ -536,16 +587,34 @@ try {
     $totalTransactions = 0;
 }
 
-// 2. Contestant Leaderboard (Cross-version compatible without RANK OVER)
+// 2. Contestant Leaderboard & Registration Gate Data
 $contestants = [];
+$regFilter = $_GET['reg_filter'] ?? 'all';
+$contestantSearch = trim($_GET['c_search'] ?? '');
+$regFee = RegistrationService::getRegistrationFee();
+$regStats = RegistrationService::getRegistrationStats();
+
 try {
-    $contestantsStmt = $pdo->query("
-        SELECT id, username, full_name, email, phone_number, photo, vote_count
+    $cSql = "
+        SELECT id, username, full_name, email, phone_number, photo, vote_count,
+               registration_status, registration_paid_at, registration_payment_ref, registration_fee_paid
         FROM users 
-        WHERE is_admin = 0 
-        ORDER BY vote_count DESC
-    ");
-    $rawContestants = $contestantsStmt->fetchAll();
+        WHERE is_admin = 0
+    ";
+    $cParams = [];
+    if (!empty($regFilter) && $regFilter !== 'all') {
+        $cSql .= " AND registration_status = :reg_stat";
+        $cParams[':reg_stat'] = $regFilter;
+    }
+    if (!empty($contestantSearch)) {
+        $cSql .= " AND (full_name LIKE :c_s OR username LIKE :c_s OR email LIKE :c_s OR phone_number LIKE :c_s OR registration_payment_ref LIKE :c_s)";
+        $cParams[':c_s'] = '%' . $contestantSearch . '%';
+    }
+    $cSql .= " ORDER BY vote_count DESC";
+
+    $cStmt = $pdo->prepare($cSql);
+    $cStmt->execute($cParams);
+    $rawContestants = $cStmt->fetchAll();
     $rankNum = 1;
     foreach ($rawContestants as $row) {
         $row['ranking'] = $rankNum++;
@@ -817,12 +886,51 @@ $currency = Settings::getCurrencySymbol();
 
     <div class="tab-content" id="adminTabsContent">
 
-        <!-- ==================== TAB 1: CONTESTANTS ==================== -->
+        <!-- ==================== TAB 1: CONTESTANTS & REGISTRATION AUDIT ==================== -->
         <div class="tab-pane fade show active" id="contestantsTab">
+            <!-- Registration Key Metrics Row -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md-3">
+                    <div class="stat-card p-3">
+                        <div class="stat-label text-secondary small text-uppercase fw-bold">Total Contestants</div>
+                        <div class="stat-value text-white"><?= number_format($regStats['total_contestants']) ?></div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card p-3">
+                        <div class="stat-label text-success small text-uppercase fw-bold">Verified & Paid</div>
+                        <div class="stat-value text-success"><?= number_format($regStats['paid_count']) ?></div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card p-3">
+                        <div class="stat-label text-warning small text-uppercase fw-bold">Pending Payment</div>
+                        <div class="stat-value text-warning"><?= number_format($regStats['pending_count']) ?></div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card p-3">
+                        <div class="stat-label text-info small text-uppercase fw-bold">Reg Fees Revenue</div>
+                        <div class="stat-value text-info"><?= $currency ?><?= number_format($regStats['total_revenue'], 2) ?></div>
+                    </div>
+                </div>
+            </div>
+
             <div class="content-panel">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-                    <h5 class="fw-bold text-white mb-0">Contestant Leaderboard & Management</h5>
-                    <div class="d-flex gap-2">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+                    <div>
+                        <h5 class="fw-bold text-white mb-1">Contestant Leaderboard & Registration Gate</h5>
+                        <p class="text-secondary small mb-0">Audit verified contestants, manage registration fees, and review payments.</p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <!-- Export CSV Form -->
+                        <form method="POST">
+                            <?= Security::csrfField() ?>
+                            <input type="hidden" name="admin_action" value="export_registrations">
+                            <button type="submit" class="btn btn-outline-info btn-sm">
+                                <i class="fas fa-file-csv me-1"></i> Export Records (CSV)
+                            </button>
+                        </form>
                         <!-- Reset All Votes Form -->
                         <form method="POST" onsubmit="return confirm('CRITICAL: Are you sure you want to reset ALL contestant votes to zero?');">
                             <?= Security::csrfField() ?>
@@ -832,6 +940,33 @@ $currency = Settings::getCurrencySymbol();
                             </button>
                         </form>
                     </div>
+                </div>
+
+                <!-- Filters & Search Toolbar -->
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 p-3 rounded bg-darker border border-secondary border-opacity-25">
+                    <div class="d-flex flex-wrap gap-1">
+                        <a href="admin_dashboard.php?reg_filter=all" class="btn btn-sm <?= ($regFilter === 'all') ? 'btn-gold' : 'btn-outline-secondary' ?>">
+                            All (<?= $regStats['total_contestants'] ?>)
+                        </a>
+                        <a href="admin_dashboard.php?reg_filter=paid" class="btn btn-sm <?= ($regFilter === 'paid') ? 'btn-success' : 'btn-outline-success' ?>">
+                            <i class="fas fa-check-circle me-1"></i> Paid & Active (<?= $regStats['paid_count'] ?>)
+                        </a>
+                        <a href="admin_dashboard.php?reg_filter=pending" class="btn btn-sm <?= ($regFilter === 'pending') ? 'btn-warning' : 'btn-outline-warning' ?>">
+                            <i class="fas fa-clock me-1"></i> Pending Payment (<?= $regStats['pending_count'] ?>)
+                        </a>
+                        <a href="admin_dashboard.php?reg_filter=exempt" class="btn btn-sm <?= ($regFilter === 'exempt') ? 'btn-info' : 'btn-outline-info' ?>">
+                            <i class="fas fa-gift me-1"></i> Exempt (<?= $regStats['exempt_count'] ?>)
+                        </a>
+                    </div>
+
+                    <form method="GET" class="d-flex gap-2">
+                        <input type="hidden" name="reg_filter" value="<?= e($regFilter) ?>">
+                        <input type="text" name="c_search" class="form-control form-control-sm bg-dark border-secondary text-white" placeholder="Search name, phone, ref..." value="<?= e($contestantSearch) ?>" style="width: 220px;">
+                        <button type="submit" class="btn btn-outline-warning btn-sm"><i class="fas fa-search"></i></button>
+                        <?php if (!empty($contestantSearch) || $regFilter !== 'all'): ?>
+                            <a href="admin_dashboard.php" class="btn btn-outline-secondary btn-sm" title="Clear Filters"><i class="fas fa-times"></i></a>
+                        <?php endif; ?>
+                    </form>
                 </div>
 
                 <form method="POST" id="batchForm">
@@ -847,6 +982,7 @@ $currency = Settings::getCurrencySymbol();
                                     <th>Photo</th>
                                     <th>Contestant</th>
                                     <th>Contact Info</th>
+                                    <th>Registration Status</th>
                                     <th>Votes</th>
                                     <th class="text-end">Actions</th>
                                 </tr>
@@ -854,15 +990,19 @@ $currency = Settings::getCurrencySymbol();
                             <tbody>
                                 <?php if (empty($contestants)): ?>
                                     <tr>
-                                        <td colspan="7" class="text-center py-4 text-secondary">No contestants currently registered.</td>
+                                        <td colspan="8" class="text-center py-4 text-secondary">No contestants match the current filter or search criteria.</td>
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($contestants as $c): ?>
+                                        <?php 
+                                            $cStatus = strtolower($c['registration_status'] ?? 'paid');
+                                            $cAvatar = Auth::getAvatarUrl($c['photo'] ?? null);
+                                        ?>
                                         <tr>
                                             <td><input type="checkbox" name="selected_users[]" value="<?= $c['id'] ?>" class="user-chk"></td>
                                             <td><span class="badge bg-warning text-dark fw-bold">#<?= (int)$c['ranking'] ?></span></td>
                                             <td>
-                                                <img src="uploads/<?= e($c['photo']) ?>" alt="<?= e($c['username']) ?>" width="45" height="45" class="rounded-circle object-fit-cover border border-secondary">
+                                                <img src="<?= e($cAvatar) ?>" alt="<?= e($c['username']) ?>" width="45" height="45" class="rounded-circle object-fit-cover border border-secondary">
                                             </td>
                                             <td>
                                                 <div class="fw-bold text-white"><?= e($c['full_name']) ?></div>
@@ -880,17 +1020,33 @@ $currency = Settings::getCurrencySymbol();
                                                 <div class="text-secondary small"><?= e($c['phone_number']) ?></div>
                                             </td>
                                             <td>
+                                                <div class="mb-1"><?= RegistrationService::formatStatusBadge($cStatus) ?></div>
+                                                <?php if ($cStatus === 'paid' && !empty($c['registration_fee_paid'])): ?>
+                                                    <div class="small text-secondary" style="font-size: 11px;">
+                                                        <?= $currency ?><?= number_format((float)$c['registration_fee_paid'], 2) ?>
+                                                        <?php if (!empty($c['registration_payment_ref'])): ?>
+                                                            &bull; <code><?= e(substr($c['registration_payment_ref'], 0, 14)) ?>...</code>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
                                                 <!-- Inline Vote Adjustment -->
                                                 <form method="POST" class="d-inline-flex align-items-center gap-1">
                                                     <?= Security::csrfField() ?>
                                                     <input type="hidden" name="admin_action" value="update_vote_count">
                                                     <input type="hidden" name="user_id" value="<?= $c['id'] ?>">
-                                                    <input type="number" name="vote_count" value="<?= (int)$c['vote_count'] ?>" class="form-control form-control-sm bg-dark border-secondary text-warning fw-bold" style="width: 90px;" min="0">
+                                                    <input type="number" name="vote_count" value="<?= (int)$c['vote_count'] ?>" class="form-control form-control-sm bg-dark border-secondary text-warning fw-bold" style="width: 80px;" min="0">
                                                     <button type="submit" class="btn btn-outline-warning btn-sm" title="Save Vote Count"><i class="fas fa-save"></i></button>
                                                 </form>
                                             </td>
                                             <td class="text-end">
                                                 <div class="d-inline-flex gap-1">
+                                                    <!-- Change Registration Status Modal Trigger -->
+                                                    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#statusModal_<?= (int)$c['id'] ?>" title="Manage Registration Status">
+                                                        <i class="fas fa-user-check"></i>
+                                                    </button>
+
                                                     <a href="profile.php?id=<?= $c['id'] ?>" target="_blank" class="btn btn-outline-info btn-sm" title="View Public Profile">
                                                         <i class="fas fa-eye"></i>
                                                     </a>
@@ -1040,6 +1196,44 @@ $currency = Settings::getCurrencySymbol();
                                 <i class="fas <?= $isRegOpen ? 'fa-lock' : 'fa-lock-open' ?> me-1"></i>
                                 <?= $isRegOpen ? 'Click to CLOSE Registration' : 'Click to OPEN Registration' ?>
                             </button>
+                        </form>
+                    </div>
+
+                    <!-- Contestant Registration Fee Configuration -->
+                    <div class="content-panel">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="fw-bold text-white mb-0"><i class="fas fa-shield-alt text-warning me-2"></i> Contestant Registration Fee</h5>
+                            <span class="badge <?= $regFee > 0 ? 'bg-warning text-dark' : 'bg-success' ?>">
+                                <?= $regFee > 0 ? $currency . number_format($regFee, 2) : 'Free Registration' ?>
+                            </span>
+                        </div>
+                        <p class="text-secondary small mb-3">Set mandatory entry fee. If > ₦0, new contestants are blocked at the payment checkpoint until verified.</p>
+
+                        <form method="POST">
+                            <?= Security::csrfField() ?>
+                            <input type="hidden" name="admin_action" value="update_registration_fee">
+
+                            <div class="mb-2">
+                                <label class="form-label text-light small fw-semibold">Registration Fee Amount (<?= $currency ?>)</label>
+                                <div class="input-group mb-2">
+                                    <span class="input-group-text bg-dark border-secondary text-warning"><?= $currency ?></span>
+                                    <input type="number" step="100" min="0" name="registration_fee" id="regFeeInput" class="form-control bg-dark border-secondary text-white" value="<?= (float)$regFee ?>" required>
+                                    <button type="submit" class="btn btn-gold"><i class="fas fa-save me-1"></i> Save Fee</button>
+                                </div>
+                            </div>
+
+                            <!-- Quick Presets -->
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <span class="text-secondary small me-1 align-self-center">Presets:</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 11px;" onclick="document.getElementById('regFeeInput').value='0'">₦0 (Free)</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 11px;" onclick="document.getElementById('regFeeInput').value='500'">₦500</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 11px;" onclick="document.getElementById('regFeeInput').value='1000'">₦1,000</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 11px;" onclick="document.getElementById('regFeeInput').value='2500'">₦2,500</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 11px;" onclick="document.getElementById('regFeeInput').value='5000'">₦5,000</button>
+                            </div>
+                            <div class="form-text text-secondary" style="font-size: 11px;">
+                                Set to <code>0</code> for free registration. Changes immediately apply to all future contestant sign-ups.
+                            </div>
                         </form>
                     </div>
 
@@ -1566,6 +1760,60 @@ $currency = Settings::getCurrencySymbol();
 
     </div>
 </div>
+
+
+<!-- ==================== CONTESTANT REGISTRATION STATUS MODALS ==================== -->
+<?php foreach ($contestants as $c): ?>
+<div class="modal fade" id="statusModal_<?= (int)$c['id'] ?>" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <div class="modal-header border-secondary bg-darker">
+                <h5 class="modal-title fw-bold text-warning">
+                    <i class="fas fa-user-check me-2"></i> Registration Status: <?= e($c['full_name']) ?>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <?= Security::csrfField() ?>
+                <input type="hidden" name="admin_action" value="update_user_registration_status">
+                <input type="hidden" name="user_id" value="<?= (int)$c['id'] ?>">
+
+                <div class="modal-body p-4">
+                    <div class="mb-3 text-center">
+                        <img src="<?= e(Auth::getAvatarUrl($c['photo'] ?? null)) ?>" width="64" height="64" class="rounded-circle border border-warning mb-2 object-fit-cover">
+                        <h6 class="fw-bold text-white mb-0"><?= e($c['full_name']) ?></h6>
+                        <span class="text-secondary small">@<?= e($c['username']) ?> &bull; <?= e($c['email']) ?></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-light">Registration & Verification Status <span class="text-danger">*</span></label>
+                        <select name="registration_status" class="form-select bg-dark border-secondary text-white" required>
+                            <option value="paid" <?= ($c['registration_status'] ?? 'paid') === 'paid' ? 'selected' : '' ?>>🟢 Paid & Verified (Full Access & Public Listing)</option>
+                            <option value="pending" <?= ($c['registration_status'] ?? '') === 'pending' ? 'selected' : '' ?>>🟡 Pending Payment (Blocked at Checkpoint)</option>
+                            <option value="exempt" <?= ($c['registration_status'] ?? '') === 'exempt' ? 'selected' : '' ?>>🔵 Free / Exempt (Active Without Payment)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-light">Amount Recorded (<?= $currency ?>)</label>
+                        <input type="number" step="100" min="0" name="fee_paid" class="form-control bg-dark border-secondary text-white" value="<?= (float)($c['registration_fee_paid'] ?? $regFee) ?>">
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold text-light">Payment Reference / Note (Optional)</label>
+                        <input type="text" name="payment_ref" class="form-control bg-dark border-secondary text-white" value="<?= e($c['registration_payment_ref'] ?? '') ?>" placeholder="e.g. MANUAL_ADMIN_VERIFIED or Paystack ref">
+                    </div>
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-gold btn-sm"><i class="fas fa-save me-1"></i> Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 
 <!-- ==================== ADD BOOK MODAL ==================== -->
 <div class="modal fade" id="addBookModal" tabindex="-1" aria-labelledby="addBookModalLabel" aria-hidden="true">

@@ -20,10 +20,14 @@ if (!$contestant) {
     exit();
 }
 
+$isRegPaid = RegistrationService::isUserRegistrationComplete($contestant);
+$isOwner = Auth::isUserLoggedIn() && ((int)$_SESSION['user_id'] === $userId);
+$isAdmin = Auth::isAdminLoggedIn();
+
 // Calculate Dynamic Position on Leaderboard (Cross-Version Safe)
 $position = 1;
 try {
-    $rankStmt = $pdo->query("SELECT id, vote_count FROM users WHERE is_admin = 0 ORDER BY vote_count DESC");
+    $rankStmt = $pdo->query("SELECT id, vote_count FROM users WHERE is_admin = 0 AND (registration_status IN ('paid', 'exempt') OR registration_status IS NULL) ORDER BY vote_count DESC");
     $allUsers = $rankStmt->fetchAll();
     $posCounter = 1;
     foreach ($allUsers as $row) {
@@ -48,6 +52,7 @@ $paystackPublicKey = Env::get('PAYSTACK_PUBLIC_KEY');
 
 $siteUrl = Env::get('APP_URL', 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
 $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
+$avatarUrl = Auth::getAvatarUrl($contestant['photo'] ?? null);
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
@@ -60,7 +65,7 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
     <!-- OpenGraph & Social Cards -->
     <meta property="og:title" content="Vote for <?= e($contestant['full_name']) ?> on <?= e($siteTitle) ?>">
     <meta property="og:description" content="Cast your vote to support <?= e($contestant['full_name']) ?>. Every vote counts!">
-    <meta property="og:image" content="<?= rtrim($siteUrl, '/') ?>/uploads/<?= e($contestant['photo']) ?>">
+    <meta property="og:image" content="<?= rtrim($siteUrl, '/') ?>/<?= e($avatarUrl) ?>">
     <meta property="og:url" content="<?= e($profileUrl) ?>">
 
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -98,15 +103,15 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
             text-align: center;
         }
         .avatar-wrap {
-            width: 170px;
-            height: 170px;
+            width: 140px;
+            height: 140px;
             border-radius: 50%;
-            border: 4px solid #ffd700;
+            border: 3px solid #ffd700;
             padding: 4px;
             background: #110d24;
-            margin: 0 auto 20px;
-            position: relative;
-            box-shadow: 0 0 30px rgba(255, 215, 0, 0.35);
+            margin: 0 auto 16px;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+            overflow: hidden;
         }
         .avatar-wrap img {
             width: 100%;
@@ -117,65 +122,62 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
         .rank-badge {
             position: absolute;
             top: 20px;
-            right: 20px;
+            left: 20px;
             background: linear-gradient(135deg, #ffd700 0%, #d4af37 100%);
             color: #0d1117;
-            font-size: 14px;
             font-weight: 800;
-            padding: 6px 16px;
+            padding: 6px 14px;
             border-radius: 50px;
+            font-size: 13px;
             box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
         }
         .stage-pill {
-            display: inline-block;
-            background: rgba(255, 215, 0, 0.12);
-            border: 1px solid rgba(255, 215, 0, 0.3);
-            color: #ffd700;
-            font-size: 13px;
-            font-weight: 700;
-            padding: 4px 16px;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e2e8f0;
+            font-weight: 600;
+            padding: 6px 14px;
             border-radius: 50px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 12px;
+            font-size: 13px;
         }
         .vote-box {
-            background: rgba(15, 12, 32, 0.9);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(15, 11, 30, 0.85);
+            border: 1px solid rgba(255, 215, 0, 0.3);
             border-radius: 18px;
             padding: 24px;
             margin-top: 24px;
             text-align: left;
         }
         .quick-btn {
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.15);
-            color: #f1f5f9;
+            color: #fff;
+            padding: 10px;
             border-radius: 10px;
-            padding: 10px 14px;
-            font-weight: 700;
-            font-size: 13px;
-            transition: all 0.2s ease;
-            cursor: pointer;
             text-align: center;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
         .quick-btn:hover, .quick-btn.active {
-            background: #ffd700;
-            color: #0d1117;
+            background: rgba(255, 215, 0, 0.15);
             border-color: #ffd700;
-            transform: translateY(-2px);
+            color: #ffd700;
         }
         .btn-vote-now {
-            background: linear-gradient(135deg, #ffd700 0%, #ffaa00 100%);
+            background: linear-gradient(135deg, #ffd700 0%, #ff9900 100%);
             color: #0d1117;
             font-weight: 800;
-            font-size: 18px;
+            font-size: 16px;
             padding: 14px;
-            border-radius: 12px;
+            border-radius: 10px;
             border: none;
             width: 100%;
             transition: all 0.3s ease;
-            box-shadow: 0 8px 25px rgba(255, 170, 0, 0.35);
+            box-shadow: 0 6px 20px rgba(255, 170, 0, 0.35);
         }
         .btn-vote-now:hover {
             background: linear-gradient(135deg, #ffe033 0%, #ffbb11 100%);
@@ -193,6 +195,13 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
             font-weight: 800;
             font-size: 18px;
             letter-spacing: 1px;
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, #ffd700 0%, #d4af37 100%);
+            color: #0d1117;
+            font-weight: 700;
+            border-radius: 8px;
+            border: none;
         }
     </style>
 </head>
@@ -221,7 +230,7 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
 
         <!-- Contestant Avatar -->
         <div class="avatar-wrap">
-            <img src="uploads/<?= e($contestant['photo']) ?>" alt="<?= e($contestant['full_name']) ?>">
+            <img src="<?= e($avatarUrl) ?>" alt="<?= e($contestant['full_name']) ?>">
         </div>
 
         <h2 class="fw-bold text-white mb-1"><?= e($contestant['full_name']) ?></h2>
@@ -257,8 +266,23 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
             </div>
         <?php endif; ?>
 
-        <!-- Voting Interface -->
-        <?php if (!$isVotingOpen): ?>
+        <!-- Voting Interface / Registration Gate Check -->
+        <?php if (!$isRegPaid): ?>
+            <?php if ($isOwner): ?>
+                <div class="alert alert-warning mt-4 p-4 border-0 rounded-4 text-center" style="background: rgba(255, 193, 7, 0.15); color: #ffd700;">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2 d-block"></i>
+                    <h5 class="fw-bold mb-2">Registration Payment Incomplete</h5>
+                    <p class="small mb-3">Your contestant entry is currently pending registration payment. Complete your payment to activate public voting and make your profile visible on the main leaderboard.</p>
+                    <a href="complete_registration.php" class="btn btn-gold btn-sm px-4 py-2"><i class="fas fa-shield-alt me-1"></i> Pay Registration Fee & Activate</a>
+                </div>
+            <?php else: ?>
+                <div class="alert alert-secondary mt-4 p-4 border-0 rounded-4 text-center" style="background: rgba(30, 26, 50, 0.7); color: #cbd5e1;">
+                    <i class="fas fa-user-clock fa-2x mb-2 d-block text-warning"></i>
+                    <h5 class="fw-bold text-white mb-2">Contestant Entry Pending Verification</h5>
+                    <p class="small mb-0">This contestant is currently completing their registration requirements. Public voting will open once verification is finalized.</p>
+                </div>
+            <?php endif; ?>
+        <?php elseif (!$isVotingOpen): ?>
             <div class="alert alert-warning mt-4 border-0" style="background: rgba(255, 193, 7, 0.15); color: #ffd700;">
                 <i class="fas fa-clock fa-2x mb-2 d-block"></i>
                 <h5 class="fw-bold">Voting is Closed</h5>
@@ -278,8 +302,8 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
                         </div>
                     </div>
                     <div class="col-6 col-sm-3">
-                        <div class="quick-btn" onclick="selectQuickVotes(20, this)">
-                            20 Votes<br><span class="text-warning small"><?= $currencySymbol ?><?= number_format(20 * $votePrice) ?></span>
+                        <div class="quick-btn" onclick="selectQuickVotes(25, this)">
+                            25 Votes<br><span class="text-warning small"><?= $currencySymbol ?><?= number_format(25 * $votePrice) ?></span>
                         </div>
                     </div>
                     <div class="col-6 col-sm-3">
@@ -294,11 +318,11 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
                     </div>
                 </div>
 
-                <!-- Custom Input -->
+                <!-- Custom Vote Count -->
                 <div class="row g-2 mb-3">
                     <div class="col-12 col-sm-6">
-                        <label class="form-label text-light small fw-semibold">Number of Votes</label>
-                        <input type="number" id="customVoteCount" class="form-control bg-dark border-secondary text-white" min="1" value="10" oninput="updateTotalAmount()">
+                        <label class="form-label text-light small fw-semibold" for="customVoteCount">Custom Vote Count</label>
+                        <input type="number" id="customVoteCount" class="form-control bg-dark border-secondary text-white" value="10" min="1" step="1" oninput="updateTotalAmount()">
                     </div>
                     <div class="col-12 col-sm-6">
                         <label class="form-label text-light small fw-semibold">Total Amount (<?= $currencyCode ?>)</label>
@@ -311,11 +335,11 @@ $profileUrl = rtrim($siteUrl, '/') . '/profile.php?id=' . $userId;
                 <!-- Voter Information -->
                 <div class="row g-2 mb-4">
                     <div class="col-12 col-sm-6">
-                        <label class="form-label text-light small fw-semibold">Your Email Address *</label>
+                        <label class="form-label text-light small fw-semibold" for="voterEmail">Your Email Address *</label>
                         <input type="email" id="voterEmail" class="form-control bg-dark border-secondary text-white" placeholder="receipt@example.com" required>
                     </div>
                     <div class="col-12 col-sm-6">
-                        <label class="form-label text-light small fw-semibold">Your Name (Optional)</label>
+                        <label class="form-label text-light small fw-semibold" for="voterName">Your Name (Optional)</label>
                         <input type="text" id="voterName" class="form-control bg-dark border-secondary text-white" placeholder="Supporter Name">
                     </div>
                 </div>

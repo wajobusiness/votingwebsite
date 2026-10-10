@@ -1,13 +1,20 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-// If already logged in, redirect to dashboard
+// If already logged in, redirect based on registration status
 if (Auth::isUserLoggedIn()) {
-    header('Location: dashboard.php');
+    $curr = Auth::getCurrentUser();
+    if ($curr && !RegistrationService::isUserRegistrationComplete($curr)) {
+        header('Location: complete_registration.php');
+    } else {
+        header('Location: dashboard.php');
+    }
     exit();
 }
 
 $isRegistrationOpen = Settings::isRegistrationOpen();
+$regFee = RegistrationService::getRegistrationFee();
+$currency = Settings::getCurrencySymbol();
 $error = '';
 $success = '';
 
@@ -67,13 +74,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $photoFilename = $upload['filename'];
                     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
+                    $isFeeRequired = RegistrationService::isFeeRequired();
+                    $initialRegStatus = $isFeeRequired ? 'pending' : 'exempt';
+
                     try {
                         try {
                             $insertStmt = $pdo->prepare("
                                 INSERT INTO users (
-                                    username, email, password, full_name, phone_number, photo, bio, video_url, vote_count, is_admin, is_active
+                                    username, email, password, full_name, phone_number, photo, bio, video_url, 
+                                    vote_count, is_admin, is_active, registration_status, registration_fee_paid
                                 ) VALUES (
-                                    :username, :email, :password, :full_name, :phone_number, :photo, :bio, :video_url, 0, 0, 1
+                                    :username, :email, :password, :full_name, :phone_number, :photo, :bio, :video_url, 
+                                    0, 0, 1, :reg_status, 0.00
                                 )
                             ");
 
@@ -85,24 +97,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':phone_number' => $phoneNumber,
                                 ':photo'        => $photoFilename,
                                 ':bio'          => $bio,
-                                ':video_url'    => !empty($videoUrl) ? $videoUrl : null
+                                ':video_url'    => !empty($videoUrl) ? $videoUrl : null,
+                                ':reg_status'   => $initialRegStatus
                             ]);
                         } catch (Exception $subEx) {
                             // Fallback if schema variations exist
                             $insertStmt = $pdo->prepare("
                                 INSERT INTO users (
-                                    username, email, password, full_name, photo, vote_count, is_admin
+                                    username, email, password, full_name, photo, vote_count, is_admin, registration_status
                                 ) VALUES (
-                                    :username, :email, :password, :full_name, :photo, 0, 0
+                                    :username, :email, :password, :full_name, :photo, 0, 0, :reg_status
                                 )
                             ");
 
                             $insertStmt->execute([
-                                ':username'  => $username,
-                                ':email'     => $email,
-                                ':password'  => $passwordHash,
-                                ':full_name' => $fullName,
-                                ':photo'     => $photoFilename
+                                ':username'   => $username,
+                                ':email'      => $email,
+                                ':password'   => $passwordHash,
+                                ':full_name'  => $fullName,
+                                ':photo'      => $photoFilename,
+                                ':reg_status' => $initialRegStatus
                             ]);
                         }
 
@@ -116,14 +130,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['user_email'] = $email;
                         $_SESSION['user_full_name'] = $fullName;
 
+                        $redirectTarget = $isFeeRequired ? 'complete_registration.php' : 'dashboard.php';
+
                         // Check if AJAX request
                         if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
                             header('Content-Type: application/json');
-                            echo json_encode(['status' => 'success', 'message' => 'Registration successful! Redirecting...', 'redirect' => 'dashboard.php']);
+                            echo json_encode([
+                                'status'   => 'success',
+                                'message'  => $isFeeRequired ? 'Account created! Please complete registration payment.' : 'Registration successful! Redirecting...',
+                                'redirect' => $redirectTarget
+                            ]);
                             exit();
                         }
 
-                        header('Location: dashboard.php');
+                        header("Location: {$redirectTarget}");
                         exit();
 
                     } catch (Exception $e) {
@@ -149,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Join Contest - Register as Contestant</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets2/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets2/css/all.min.css">
     <style>
@@ -241,7 +261,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="text-center">
         <div class="brand-badge"><i class="fas fa-sparkles me-1"></i> Official Registration</div>
         <h3 class="fw-bold text-white mb-1">Enter Competition</h3>
-        <p class="text-secondary mb-4 small">Create your profile to start receiving public votes</p>
+        <p class="text-secondary mb-3 small">Create your profile to start receiving public votes</p>
+        <?php if ($regFee > 0): ?>
+            <div class="alert alert-info py-2 px-3 small border-0 mb-3 d-inline-flex align-items-center gap-2" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa;">
+                <i class="fas fa-info-circle"></i>
+                <span>Official Contestant Registration Fee: <strong class="text-warning"><?= $currency ?><?= number_format($regFee, 2) ?></strong></span>
+            </div>
+        <?php endif; ?>
     </div>
 
     <?php if (!$isRegistrationOpen): ?>
@@ -316,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <div class="d-grid mb-3">
-                <button class="btn btn-gold" type="submit"><i class="fas fa-check-circle me-2"></i> Complete Registration</button>
+                <button class="btn btn-gold" type="submit"><i class="fas fa-check-circle me-2"></i> Continue to Complete Registration</button>
             </div>
 
             <p class="text-center text-secondary small mb-0">

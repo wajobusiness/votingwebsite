@@ -3,7 +3,12 @@ require_once __DIR__ . '/config.php';
 
 // Redirect if already logged in as contestant
 if (Auth::isUserLoggedIn()) {
-    header('Location: dashboard.php');
+    $curr = Auth::getCurrentUser();
+    if ($curr && !RegistrationService::isUserRegistrationComplete($curr)) {
+        header('Location: complete_registration.php');
+    } else {
+        header('Location: dashboard.php');
+    }
     exit();
 }
 
@@ -21,7 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $authResult = Auth::attemptUserLogin($login, $password);
             if ($authResult['success']) {
-                header('Location: dashboard.php');
+                $user = $authResult['user'];
+                if (!RegistrationService::isUserRegistrationComplete($user)) {
+                    header('Location: complete_registration.php');
+                } else {
+                    header('Location: dashboard.php');
+                }
                 exit();
             } else {
                 $error = $authResult['error'];
@@ -36,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Contestant Sign In - <?= e(Settings::get('site_title', 'Voting Platform')) ?></title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets2/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets2/css/all.min.css">
     <style>

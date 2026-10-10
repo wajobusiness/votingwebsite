@@ -29,7 +29,8 @@ try {
     $contestantsStmt = $pdo->query("
         SELECT id, username, full_name, photo, vote_count
         FROM users 
-        WHERE is_admin = 0 AND is_active = 1
+        WHERE is_admin = 0 AND is_active = 1 
+          AND (registration_status IN ('paid', 'exempt') OR registration_status IS NULL)
         ORDER BY vote_count DESC
     ");
     $rawList = $contestantsStmt->fetchAll();
@@ -653,7 +654,7 @@ $publishedBattles = BattlesService::getPublishedBattles();
                         <div class="contestant-card">
                             <div class="card-img-wrap">
                                 <div class="rank-tag">#<?= (int)$c['position'] ?></div>
-                                <img src="uploads/<?= e($c['photo']) ?>" alt="<?= e($c['full_name']) ?>" loading="lazy">
+                                <img src="<?= e(Auth::getAvatarUrl($c['photo'] ?? null)) ?>" alt="<?= e($c['full_name']) ?>" loading="lazy">
                             </div>
                             <div class="p-3 d-flex flex-column flex-grow-1 justify-content-between">
                                 <div>

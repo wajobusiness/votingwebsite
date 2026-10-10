@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/registration_service.php';
 
 class Auth {
 
@@ -80,6 +81,23 @@ class Auth {
         }
     }
 
+    /**
+     * Enforce that contestant is logged in AND has completed their registration fee requirement
+     */
+    public static function requireRegistrationComplete(): void {
+        self::requireUser();
+
+        $user = self::getCurrentUser();
+        if (!$user) {
+            self::logoutUser();
+        }
+
+        if (!RegistrationService::isUserRegistrationComplete($user)) {
+            header('Location: complete_registration.php');
+            exit();
+        }
+    }
+
     public static function requireAdmin(): void {
         if (!self::isAdminLoggedIn()) {
             header('Location: adminlogin.php');
@@ -111,6 +129,31 @@ class Auth {
         $admin = $stmt->fetch();
 
         return $admin ?: null;
+    }
+
+    /**
+     * Safe Avatar URL resolver with fallback to default avatar
+     */
+    public static function getAvatarUrl(?string $photo): string {
+        if (empty($photo) || $photo === 'default_avatar.png' || $photo === 'default_avatar.svg') {
+            return 'uploads/default_avatar.png';
+        }
+
+        $trimmed = ltrim($photo, '/');
+        if (str_starts_with($trimmed, 'uploads/')) {
+            $checkPath = __DIR__ . '/../' . $trimmed;
+            if (file_exists($checkPath) && is_file($checkPath)) {
+                return $trimmed;
+            }
+            return 'uploads/default_avatar.png';
+        }
+
+        $checkPath = __DIR__ . '/../uploads/' . $trimmed;
+        if (file_exists($checkPath) && is_file($checkPath)) {
+            return 'uploads/' . $trimmed;
+        }
+
+        return 'uploads/default_avatar.png';
     }
 
     public static function logoutUser(): void {
